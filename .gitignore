@@ -1,5 +1,6 @@
 **/tmp_images/*
-
+sandbox.py
+image.jpeg
 # CAD
 *.FCStd1
 *.stl

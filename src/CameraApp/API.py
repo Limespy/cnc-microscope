@@ -14,7 +14,7 @@ path_CWD = pathlib.Path.cwd()
 stride = 6112
 rows = 3040
 cols = 4056
-exposure = 1e-2
+exposure = 2e-3
 black_level = 255
 class RAMDrive:
 
