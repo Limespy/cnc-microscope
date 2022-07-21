@@ -1,3 +1,10 @@
+**/tmp_images/*
+
+# CAD
+*.FCStd1
+*.stl
+*.x3g
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -127,8 +134,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
-# CAD
-*.FCStd1
-*.stl
-*.x3g

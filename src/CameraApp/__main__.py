@@ -7,10 +7,18 @@ import sys
 
 args = sys.argv[1:]
 
-if not args:
+if not args or args[0].lower() == 'hello':
+    print('Hello')
     CameraApp.hello()
 elif args[0] == 'image':
-    with CameraApp.RAMdrive() as path:
-        CameraApp.take_raw(path)
-        image = CameraApp.load_raw(path)
-        CameraApp.show(image)
+    with CameraApp.RAMDrive() as path:
+        fpath = CameraApp.take_raw(path)
+        print('Loading image')
+        image = CameraApp.load_raw(fpath)
+        print('Showing image')
+        CameraApp.show(image, vmax = 12)
+elif args[0] == 'show':
+    CameraApp.show()
+elif args[0] == 'hdr':
+    image = CameraApp.HDR5()
+    CameraApp.show(image, vmax = 16)
