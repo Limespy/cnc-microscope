@@ -127,3 +127,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# CAD
+*.FCStd1
+*.stl
+*.x3g
