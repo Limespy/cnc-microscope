@@ -13,11 +13,22 @@ default_location = path_package / 'tmp_images'
 width = 4056
 height = 3040
 
-def RAMdrive(path = default_location, size_MiB: int = 512):
-    if path.exists():
-        raise FileExistsError('Path already exists')
-    path.touch()
-    os.system(f'sudo mount -t tmpfs -o size={size_MiB}m images {path}')
+class RAMDrive:
+
+    def __init__(self, path = default_location, size_MiB: int = 512) -> None:
+        if path.exists():
+            raise FileExistsError('Path already exists')
+        self.path = path
+        self.size_MiB = int(size_MiB)
+    #───────────────────────────────────────────────────────────────────
+    def __enter__(self):
+        self.path.mkdir()
+        os.system(f'sudo mount -t tmpfs -o size={self.size_MiB}m images {self.path}')
+        return self.path
+    #───────────────────────────────────────────────────────────────────
+    def __exit__(self, exc_type, exc_value, traceback):
+        os.system(f'sudo umount {self.path}')
+        self.path.unlink()
 
 def hello():
     os.system('libcamera-hello')
@@ -28,20 +39,15 @@ def take_raw(shutter_s: float = 1e-3,
     os.system(f'libcamera-raw 100 --rawfull --shutter {int(shutter_s * 1e6)} --segment -o {(path / (fname + "%03d." + file_extension))}')
     return path
 
-def parse_bytes(byte1: bytes, byte2: bytes, byte3: bytes
-          ) -> tuple[np.uint16, np.uint16]:
-    return (((np.uint16(byte1) << 4) | (np.uint16(byte2) >> 4)),
-            ((np.uint16(byte2 & 0b00001111) << 8) | np.uint16(byte3)))
-
 def load_raw(path: pathlib.Path = default_location):
     with open(path, 'rb') as raw_file:
         image = []
         for _ in range(height):
             row = []
             for _ in range(width / 3 * 2):
-                p1, p2 = parse_bytes(*raw_file.read(3))
-                row.append(p1)
-                row.append(p2)
+                b1, b2, b3 = raw_file.read(3)
+                row.append((np.uint16(b1) << 4) | (np.uint16(b2) >> 4))
+                row.append((np.uint16(b2 & 0b00001111) << 8) | np.uint16(b3))
 
             image.append(np.array(row, dtype = np.uint16))
     return np.array(image, dtype = np.uint16)

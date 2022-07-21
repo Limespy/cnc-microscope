@@ -10,7 +10,7 @@ args = sys.argv[1:]
 if not args:
     CameraApp.hello()
 elif args[0] == 'image':
-    CameraApp.RAMdrive()
-    path = CameraApp.take_raw()
-    image = CameraApp.load_raw()
-    CameraApp.show(image)
+    with CameraApp.RAMdrive() as path:
+        CameraApp.take_raw(path)
+        image = CameraApp.load_raw(path)
+        CameraApp.show(image)
