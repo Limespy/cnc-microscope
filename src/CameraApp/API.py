@@ -144,7 +144,7 @@ def HDR5():
     print(image.shape)
     return image
 
-def interpolate_greens(green1: Float32Array, green2: Float32Array
+def interp_checkerboard(arr1: Float32Array, arr2: Float32Array
                        ) -> Float32Array:
     '''
     
@@ -161,9 +161,9 @@ def interpolate_greens(green1: Float32Array, green2: Float32Array
 
     Parameters
     ----------
-    green1 : Float32Array
+    arr1 : Float32Array
         _description_
-    green2 : Float32Array
+    arr2 : Float32Array
         _description_
 
     Returns
@@ -177,18 +177,25 @@ def interpolate_greens(green1: Float32Array, green2: Float32Array
         _description_
     '''
     
-    if green1.shape != green2.shape:
+    if arr1.shape != arr2.shape:
         raise ValueError(
-            f'Arrays different shapes. {green1.shape} != {green2.shape}')
-    image = np.empty((green1.shape[0] * 2, green1.shape[1] * 2),
+            f'Arrays different shapes. {arr1.shape} != {arr2.shape}')
+    image = np.empty((arr1.shape[0] * 2, arr1.shape[1] * 2),
                      dtype = np.float32)
+    image[::2, 1::2] = arr1
+    image[1::2, ::2] = arr2
     # Corners
-    image[0, 0] = (green1[0,0] + green2[0,0]) / 2
-    
+    image[0, 0] = (arr1[0, 0] + arr2[0, 0]) / 2
+    image[-1, -1] = (arr1[-1, -1] + arr2[-1, -1]) / 2
     # Edges
-    ## Top
-    image[0, 1:-2:2] = 
-
+    image[0, 2::2] = (arr1[0, :-1] + arr1[0, 1:] + arr2[0, 1:]) / 3
+    image[-1, 1:-2:2] = (arr2[-1, :-1] + arr2[0, 1:] + arr1[-1, :-1]) / 3
+    image[2::2, 0] = (arr2[:-1, 0] + arr2[1:, 0] + arr1[1:, 0]) / 3
+    image[1:-2:2, -1] = (arr1[:-1, -1] + arr1[1:, -1] + arr2[1:, -1]) / 3
+    # Middle
+    image[1:-1:2, 1:-1:2] = (arr1[:-1,:-1] + arr1[:-1,1:] + arr2[:-1,:-1] + arr2[:-1,1:]) / 4
+    image[2::2, 2::2] = (arr1[1:,:-1] + arr1[1:,1:] + arr2[:-1,1:] + arr2[1:,1:]) / 4
+    return image
 
 def combine5(images: UInt16Array,
              threshold_fraction: float = 0.01,
@@ -217,3 +224,5 @@ def combine5(images: UInt16Array,
             images_ma.mask[i,:,:,:] |= images_ma[i,:,:,:] < threshold_low
             images_ma[i,:,:,:] *= np.uint16(6 - i)
     return np.array(images_ma.mean(axis = 0), dtype = np.float32)
+
+def process1(paths_):
