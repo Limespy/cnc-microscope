@@ -9,7 +9,7 @@ args = sys.argv[1:]
 
 if not args or args[0].lower() == 'hello':
     print('Hello')
-    if len(args) == 2:
+    if len(args) >= 2:
         CameraApp.hello(shutter_s = float(args[1]))
     else:
         CameraApp.hello()
@@ -23,5 +23,9 @@ elif args[0] == 'image':
 elif args[0] == 'show':
     CameraApp.show()
 elif args[0] == 'hdr':
+    if len(args) >= 2:
+        image = CameraApp.HDR5()
+    else:
+        image = CameraApp.HDR5()
     image = CameraApp.HDR5()
-    CameraApp.show(image, vmax = 16)
+    CameraApp.show(image, vmax = 2)

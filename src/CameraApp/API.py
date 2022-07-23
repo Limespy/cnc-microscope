@@ -10,7 +10,7 @@ import os
 import pathlib
 path_package = pathlib.Path(__file__).parent.absolute()
 file_extension = 'raw'
-default_location = path_package / 'tmp_images'
+default_location = 
 path_CWD = pathlib.Path.cwd()
 stride = 6112
 rows = 3040
@@ -19,7 +19,7 @@ exposure = 2e-3
 black_level = np.uint16(260)
 class RAMDrive:
 
-    def __init__(self, path = default_location, size_MiB: int = 40) -> None:
+    def __init__(self, path = path_package / '.tmp_images', size_MiB: int = 40) -> None:
         if path.exists():
             raise FileExistsError('Path already exists')
         self.path = path
@@ -74,6 +74,24 @@ def extract_red(raw_image: UInt8Array) -> UInt16Array:
     b2 = (raw_image[1::2, 2::3] & right_half).astype(np.uint16)
     return b1 << 4 | b2
 
+def extract(data, channel = None):
+
+    if channel is None:
+        image = np.empty((rows // 2, cols // 2, 4), dtype = np.uint16)
+        image[:,:,0] = extract_blue(data)
+        image[:,:,1] = extract_green1(data)
+        image[:,:,2] = extract_green2(data)
+        image[:,:,3] = extract_red(data)
+        return image
+    elif channel == 'blue':
+        return extract_blue(data)
+    elif channel == 'green1':
+        return extract_green1(data)
+    elif channel == 'green2':
+        return extract_green2(data)
+    elif channel == 'red':
+        return extract_red(data)
+
 # @nb.jit(nopython = True)
 def substract_black(image: UInt16Array) -> UInt16Array:
     mask = image < black_level
@@ -106,58 +124,27 @@ def load_raw(path: pathlib.Path = default_location,
 
     return data
 
-def show(image = None, vmax = 16):
-    vmax = 2 ** vmax -1
+def show(image = None, vmaxb = 16):
+    vmax = 2 ** vmaxb -1
     if image is None:
         image = np.array([[vmax, vmax//2], [vmax//3, vmax // 4]], dtype = np.uint16)
     plt.imshow(image, cmap = 'gray', vmin=0, vmax=vmax)
     plt.show()
 
-def HDR5():
-    vmax = 2**12 - 1
-    mean_shutter = exposure
-
-    array = np.zeros((5, rows//2, cols//2), dtype = np.uint16)
-    mask = np.full(array.shape, False)
-    images = np.ma.array(array, mask = mask, dtype = np.uint16)
-    del array
-    del mask
+def HDR5(shutter = 4e-3):
+    shutter /= 4
     with RAMDrive() as folder:
-        shutter = mean_shutter * 4
-        for shift in range(5):
-            shutter /= 2
-            path = take_raw(folder, shutter_s = shutter)
-            tmp_image = load_raw(path)
-            images[shift, :, :] = tmp_image << shift
-            images.mask[shift, :, :] = (0 == tmp_image) | (tmp_image == vmax)
-            path.unlink()
-    image = images.astype(np.uint64).sum(axis = 0) 
-    del images
-    image_max = np.amax(image)
-    image *= np.uint64(0xffff)
-    print(f'Max before normalisation {image_max }')
-    image //= image_max
-    print(f'Vmax {2 ** 16 -1}')
-    print(f'Mean {np.mean(image)}')
-    print(f'Min {np.amin(image)}')
-    print(f'Max {np.amax(image)}')
-    print(image.shape)
+        for _ in range(5):
+            shutter *= 2
+            take_raw(folder, shutter_s = shutter)
+        image = process1(folder)
     return image
 
+@nb.jit(nb.float32[:,:](nb.float32[:,:], nb.float32[:,:]),
+        nopython = True, cache = True, parallel = True)
 def interp_checkerboard(arr1: Float32Array, arr2: Float32Array
                        ) -> Float32Array:
     '''
-    
-    _  1  _  1  _  1  _  1
-    2  _  2  _  2  _  2  _
-    _  1  _  1  _  1  _  1
-    2  _  2  _  2  _  2  _
-    _  1  _  1  _  1  _  1
-    2  _  2  _  2  _  2  _
-    _  1  _  1  _  1  _  1
-    2  _  2  _  2  _  2  _
-    _  1  _  1  _  1  _  1
-    2  _  2  _  2  _  2  _
 
     Parameters
     ----------
@@ -176,10 +163,16 @@ def interp_checkerboard(arr1: Float32Array, arr2: Float32Array
     ValueError
         _description_
     '''
-    
-    if arr1.shape != arr2.shape:
-        raise ValueError(
-            f'Arrays different shapes. {arr1.shape} != {arr2.shape}')
+    # _  1  _  1  _  1  _  1
+    # 2  _  2  _  2  _  2  _
+    # _  1  _  1  _  1  _  1
+    # 2  _  2  _  2  _  2  _
+    # _  1  _  1  _  1  _  1
+    # 2  _  2  _  2  _  2  _
+    # _  1  _  1  _  1  _  1
+    # 2  _  2  _  2  _  2  _
+    # _  1  _  1  _  1  _  1
+    # 2  _  2  _  2  _  2  _
     image = np.empty((arr1.shape[0] * 2, arr1.shape[1] * 2),
                      dtype = np.float32)
     image[::2, 1::2] = arr1
@@ -198,7 +191,7 @@ def interp_checkerboard(arr1: Float32Array, arr2: Float32Array
     return image
 
 def combine5(images: UInt16Array,
-             threshold_fraction: float = 0.01,
+             threshold_fraction: float = 0.001,
              vmin: np.uint16 | None = None,
              vmax: np.uint16 | None = None,
              ) -> Float32Array:
@@ -216,13 +209,34 @@ def combine5(images: UInt16Array,
             # inverse, because masked array
             images_ma.mask[i,:,:] |= images_ma[i,:,:] > threshold_high
             images_ma.mask[i,:,:] |= images_ma[i,:,:] < threshold_low
-            images_ma[i,:,:] *= np.uint16(6 - i)
+            images_ma[i,:,:] <<= 4 - i
     elif len(images.shape) == 4 and images.shape[3] == 3: # three channels
         for i in range(5):
             # inverse, because masked array
             images_ma.mask[i,:,:,:] |= images_ma[i,:,:,:] > threshold_high
             images_ma.mask[i,:,:,:] |= images_ma[i,:,:,:] < threshold_low
-            images_ma[i,:,:,:] *= np.uint16(6 - i)
+            images_ma[i,:,:,:] <<= 4 - i
     return np.array(images_ma.mean(axis = 0), dtype = np.float32)
 
-def process1(paths_):
+def correct_green2(green2):
+    vmax = 2**16 - black_level - 15
+    return np.log(vmax - green2) / np.log(vmax) * 50
+
+def process1(path_folder: pathlib.Path) -> Float32Array:
+
+    threshold_fraction = 1e-3
+    images1 = np.empty((5, rows // 2, cols // 2), dtype = np.uint16)
+    images2 = np.empty((5, rows // 2, cols // 2), dtype = np.uint16)
+    for n, filepath in enumerate(path_folder.glob('*.raw')):
+        data = load_raw(filepath)
+        images1[n,:,:] = substract_black(extract_green1(data))
+        images2[n,:,:] = substract_black(extract_green2(data) + np.uint16(15))
+    image1 = combine5(images1, threshold_fraction = threshold_fraction)
+    image2 = combine5(images2, threshold_fraction = threshold_fraction)
+    # rescaling to same range
+    image2 -= correct_green2(image2)
+    image1 /= np.mean(image1)
+    image2 /= np.mean(image2)
+    image1 **= 0.6
+    image2 **= 0.6
+    return interp_checkerboard(image1, image2)
