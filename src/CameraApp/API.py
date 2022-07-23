@@ -37,6 +37,7 @@ class RAMDrive:
 def hello(path: pathlib.Path = path_CWD,
           fname: str = 'image',
           shutter_s: float = exposure):
+    print(f'Shutter time {shutter_s} s')
     os.system(f'libcamera-still --shutter {int(shutter_s * 1e6)} --gain 1 -o {(path / (fname + ".jpeg"))}')
 
 def take_raw(path: pathlib.Path = default_location,

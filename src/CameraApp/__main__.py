@@ -9,7 +9,10 @@ args = sys.argv[1:]
 
 if not args or args[0].lower() == 'hello':
     print('Hello')
-    CameraApp.hello()
+    if len(args) == 2:
+        CameraApp.hello(shutter_s = float(args[1]))
+    else:
+        CameraApp.hello()
 elif args[0] == 'image':
     with CameraApp.RAMDrive() as path:
         fpath = CameraApp.take_raw(path)
