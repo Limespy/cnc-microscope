@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 """Camera control and image processing application"""
-from .GLOBALS import UInt8Array, UInt16Array
+from .GLOBALS import Float32Array, UInt8Array, UInt16Array
 
 from matplotlib import pyplot as  plt
 import numpy as np
@@ -16,7 +16,7 @@ stride = 6112
 rows = 3040
 cols = 4056
 exposure = 2e-3
-black_level = np.uint16(300)
+black_level = np.uint16(260)
 class RAMDrive:
 
     def __init__(self, path = default_location, size_MiB: int = 40) -> None:
@@ -80,6 +80,21 @@ def substract_black(image: UInt16Array) -> UInt16Array:
     image[~mask] -= black_level
     return image
 
+def highlight(image: Float32Array,
+              threshold_low: np.float32,
+              threshold_high: np.float32 | None= None
+              ) -> Float32Array:
+    if threshold_high is None:
+        threshold_high = 1 - threshold_low
+    image[image < threshold_low] = 1.
+    image[image > threshold_high] = 0.
+    return image
+
+
+# def debayer(data: UInt8Array, mode: str = 'binning') -> UInt16Array:
+
+#     out = np.empty((()))
+
 def load_raw(path: pathlib.Path = default_location,
              rows = rows,
              cols = cols,
@@ -127,21 +142,77 @@ def HDR5():
     print(f'Max {np.amax(image)}')
     print(image.shape)
     return image
-# @nb.jit(nopython = True, cache = True)
+
+def interpolate_greens(green1: Float32Array, green2: Float32Array
+                       ) -> Float32Array:
+    '''
+    
+    _  1  _  1  _  1  _  1
+    2  _  2  _  2  _  2  _
+    _  1  _  1  _  1  _  1
+    2  _  2  _  2  _  2  _
+    _  1  _  1  _  1  _  1
+    2  _  2  _  2  _  2  _
+    _  1  _  1  _  1  _  1
+    2  _  2  _  2  _  2  _
+    _  1  _  1  _  1  _  1
+    2  _  2  _  2  _  2  _
+
+    Parameters
+    ----------
+    green1 : Float32Array
+        _description_
+    green2 : Float32Array
+        _description_
+
+    Returns
+    -------
+    Float32Array
+        _description_
+
+    Raises
+    ------
+    ValueError
+        _description_
+    '''
+    
+    if green1.shape != green2.shape:
+        raise ValueError(
+            f'Arrays different shapes. {green1.shape} != {green2.shape}')
+    image = np.empty((green1.shape[0] * 2, green1.shape[1] * 2),
+                     dtype = np.float32)
+    # Corners
+    image[0, 0] = (green1[0,0] + green2[0,0]) / 2
+    
+    # Edges
+    ## Top
+    image[0, 1:-2:2] = 
+
+
 def combine5(images: UInt16Array,
+             threshold_fraction: float = 0.01,
              vmin: np.uint16 | None = None,
              vmax: np.uint16 | None = None,
-             threshold_fraction: float = 0.01):
+             ) -> Float32Array:
     if vmin is None: vmin = np.amin(images)
     if vmax is None: vmax = np.amax(images)
     vrange = vmax - vmin
     threshold = np.uint16(threshold_fraction * vrange)
+    threshold_low = vmin + threshold
+    threshold_high = vmax - threshold
     images_ma = np.ma.array(images,
                             mask = np.full(images.shape, False),
                             dtype = np.uint16)
-    for i in range(5):
-        # inverse, because masked array
-        images_ma.mask[i,:,:] |= images_ma[i,:,:] > (vmin + threshold)
-        images_ma.mask[i,:,:] |= images_ma[i,:,:] < (vmax - threshold)
-        images_ma[i,:,:] *= np.uint16(6 - i)
-    return images.mean(axis = 0)
+    if len(images.shape) == 3: # Only one channel
+        for i in range(5):
+            # inverse, because masked array
+            images_ma.mask[i,:,:] |= images_ma[i,:,:] > threshold_high
+            images_ma.mask[i,:,:] |= images_ma[i,:,:] < threshold_low
+            images_ma[i,:,:] *= np.uint16(6 - i)
+    elif len(images.shape) == 4 and images.shape[3] == 3: # three channels
+        for i in range(5):
+            # inverse, because masked array
+            images_ma.mask[i,:,:,:] |= images_ma[i,:,:,:] > threshold_high
+            images_ma.mask[i,:,:,:] |= images_ma[i,:,:,:] < threshold_low
+            images_ma[i,:,:,:] *= np.uint16(6 - i)
+    return np.array(images_ma.mean(axis = 0), dtype = np.float32)
