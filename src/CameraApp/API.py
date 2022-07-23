@@ -1,7 +1,8 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 """Camera control and image processing application"""
-from statistics import mean
+from .GLOBALS import UInt8Array, UInt16Array
+
 from matplotlib import pyplot as  plt
 import numpy as np
 import numba as nb
@@ -15,7 +16,7 @@ stride = 6112
 rows = 3040
 cols = 4056
 exposure = 2e-3
-black_level = 255
+black_level = np.uint16(300)
 class RAMDrive:
 
     def __init__(self, path = default_location, size_MiB: int = 40) -> None:
@@ -44,44 +45,55 @@ def take_raw(path: pathlib.Path = default_location,
     fpath = path / (fname + "." + file_extension)
     os.system(f'libcamera-raw 1 --rawfull --segment 1 --flush --shutter {int(shutter_s * 1e6)} --gain 1 -o {fpath}')
     return fpath
+#%%═════════════════════════════════════════════════════════════════════
+# DEBAYERING
+left_half = np.uint8(0b11110000)
+right_half = np.uint8(0b00001111)
+@nb.jit(nopython = True, cache = True)
+def extract_blue(raw_image: UInt8Array) -> UInt16Array:
+    b1 = raw_image[::2, ::3].astype(np.uint16)
+    b2 = (raw_image[0::2, 2::3] & left_half).astype(np.uint16)
+    return b1 << 4 | b2
+
+@nb.jit(nopython = True, cache= True)
+def extract_green1(raw_image: UInt8Array) -> UInt16Array:
+    b1 = raw_image[::2, 1::3].astype(np.uint16)
+    b2 = (raw_image[::2, 2::3] & right_half).astype(np.uint16)
+    return b1 << 4 | b2
+
+@nb.jit(nopython = True, cache = True)
+def extract_green2(raw_image: UInt8Array) -> UInt16Array:
+    b1 = raw_image[1::2, ::3].astype(np.uint16)
+    b2 = (raw_image[1::2, 2::3] & left_half).astype(np.uint16)
+    return b1 << 4 | b2
+
+@nb.jit(nopython = True, cache = True)
+def extract_red(raw_image: UInt8Array) -> UInt16Array:
+    b1 = raw_image[1::2, 1::3].astype(np.uint16)
+    b2 = (raw_image[1::2, 2::3] & right_half).astype(np.uint16)
+    return b1 << 4 | b2
+
 # @nb.jit(nopython = True)
-def load_raw(path: pathlib.Path = default_location):
-
-    image = np.empty((rows, cols), dtype = np.uint16)
-    with open(path, 'rb') as image_file:
-        # for rownum in range(rows):
-        # row = []
-        data = np.fromfile(image_file, dtype = np.uint8, count = rows * stride).reshape(rows, stride)[:,:cols*3 // 2]
-        print(data.shape)
-        # print(shape)
-    bg11 = data[::2, 1::3].astype(np.uint16)
-    bg12 = (data[::2, 2::3] & np.uint8(0b00001111)).astype(np.uint16)
-    green1 = bg11 << 4 | bg12
-
-    bg21 = data[1::2, ::3].astype(np.uint16)
-    bg22 = (data[1::2, 2::3] & np.uint8(0b11110000)).astype(np.uint16)
-    green2 = bg21 << 4 | bg22
-    image = (green1 + green2) >> 1
-    # b1 = data[:, ::3].astype(np.uint16)
-    # b2 = data[:, 1::3].astype(np.uint16)
-    # b31 = (data[:, 2::3] & np.uint8(0b11110000)).astype(np.uint16)
-    # b32 = (data[:, 2::3] & np.uint8(0b00001111)).astype(np.uint16)
-
-    # image[:, ::2] = b1 << 4 | b31
-    # image[:, 1::2] = b2 << 4 | b32
-
+def substract_black(image: UInt16Array) -> UInt16Array:
     mask = image < black_level
-    image[mask] = 0
+    image[mask] = np.uint16(0)
     image[~mask] -= black_level
-    print(f'Mean {np.mean(image)}')
-    print(f'Min {np.amin(image)}')
-    print(f'Max {np.amax(image)}')
     return image
+
+def load_raw(path: pathlib.Path = default_location,
+             rows = rows,
+             cols = cols,
+             stride = stride) -> UInt8Array:
+
+    with open(path, 'rb') as image_file:
+        data = np.fromfile(image_file, dtype = np.uint8, count = rows * stride).reshape(rows, stride)[:,:(cols*3) >> 1]
+
+    return data
 
 def show(image = None, vmax = 16):
     vmax = 2 ** vmax -1
     if image is None:
-        image = np.array([[vmax, vmax//2], [vmax//3, vmax // 4]], dtype = np.uint16) 
+        image = np.array([[vmax, vmax//2], [vmax//3, vmax // 4]], dtype = np.uint16)
     plt.imshow(image, cmap = 'gray', vmin=0, vmax=vmax)
     plt.show()
 
@@ -115,4 +127,21 @@ def HDR5():
     print(f'Max {np.amax(image)}')
     print(image.shape)
     return image
-
+# @nb.jit(nopython = True, cache = True)
+def combine5(images: UInt16Array,
+             vmin: np.uint16 | None = None,
+             vmax: np.uint16 | None = None,
+             threshold_fraction: float = 0.01):
+    if vmin is None: vmin = np.amin(images)
+    if vmax is None: vmax = np.amax(images)
+    vrange = vmax - vmin
+    threshold = np.uint16(threshold_fraction * vrange)
+    images_ma = np.ma.array(images,
+                            mask = np.full(images.shape, False),
+                            dtype = np.uint16)
+    for i in range(5):
+        # inverse, because masked array
+        images_ma.mask[i,:,:] |= images_ma[i,:,:] > (vmin + threshold)
+        images_ma.mask[i,:,:] |= images_ma[i,:,:] < (vmax - threshold)
+        images_ma[i,:,:] *= np.uint16(6 - i)
+    return images.mean(axis = 0)
