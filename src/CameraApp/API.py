@@ -63,8 +63,8 @@ def _extract(raw_image, row1 , row2, col1, half):
     :                         .
     :                           .
     '''
-    B1 = raw_image[row1::2, col1::3].astype(np.uint16)
-    B2 = (raw_image[row2::2, 2::3] & half).astype(np.uint16)
+    B1 = raw_image[row1::2, col1::3]
+    B2 = raw_image[row2::2, 2::3] & half
     return (B1 << 4 | B2).astype(np.uint16)
 
 @nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)

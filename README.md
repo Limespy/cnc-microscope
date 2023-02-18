@@ -2,7 +2,29 @@
 
 DIY CNC microscope based on Raspberry Pi cameras
 
-# Overview
+## Table of contents
+
+- [Overview](#overview)
+  - [Table of contents](#table-of-contents)
+  - [Variations and use cases](#variations-and-use-cases)
+- [Wireless microscope for HSK-50 spindle](#wireless-microscope-for-hsk-50-spindle)
+  - [Operation](#operation)
+    - [Application](#application)
+      - [Centering](#centering)
+        - [Marker](#marker)
+    - [Communcation](#communcation)
+      - [Format](#format)
+        - [Application to Server](#application-to-server)
+        - [Server to Application](#server-to-application)
+      - [G-code control](#g-code-control)
+  - [Spindle unit](#spindle-unit)
+    - [Mounting](#mounting)
+    - [Software](#software)
+  - [Components](#components)
+    - [On the spindle unit](#on-the-spindle-unit)
+  - [Charging station](#charging-station)
+    - [Others](#others)
+
 
 ## Variations and use cases
 
@@ -27,7 +49,62 @@ Main components that will be included all of them
 
 # Wireless microscope for HSK-50 spindle
 
-There can be multiple form factors
+Two main parts
+
+1. Spindle unit that has the camera
+2. Application on a computer
+
+Additionally
+
+1. Wi-Fi networking equipment for communication
+2. Charging station for the spindle unit
+
+```mermaid
+
+flowchart TD
+
+  subgraph spindle_unit [Spindle Unit]
+    power_supply[Power Converter]
+    raspi[Raspberry Pi Zero 2 W]
+    light[Light]
+    battery[Battery]
+    camera[Raspberry Pi HQ Camera]
+    mount[HSK 50 Mount]
+    lens[Lens]
+
+    mount === camera
+    battery-->power_supply
+    power_supply--> | 5V |raspi
+    camera === lens
+    power_supply --> | 5V | light
+    
+    light === lens
+
+    subgraph raspi [Raspberry Pi Zero 2 W]
+      libcamera([libcamera])
+      server([Server])
+      preprocessor([Image Preprocessor])
+      libcamera -.-> server
+      server <-.-> preprocessor 
+    end
+
+    raspi === lens
+    libcamera<-.->camera
+  end
+  
+  subgraph application [Application]
+    controller([Controller])
+    image_processor([Image Processor])
+    GUI([GUI])
+    
+    controller <-.-> image_processor
+    controller <-.-> GUI
+  end
+
+  
+
+  server <-.-> |Wi-Fi network| controller
+```
 
 ## Operation
 
@@ -50,16 +127,26 @@ It's main tasks are to
 
 ##### Marker
 
+Two options: 
 
-
-Marker would be composed of two thin, (5-20 pixels wide in the camera) perpendicular lines.
+Two thin, (5-20 pixels wide in the camera) perpendicular lines.
 The lines would be aligned with the machine X and y-axis with some calibration values possible.
+- Simpler to
 
+ARUCO marker
+
+- More complex to make
+- Can be parsed with OpenCV
 
 ### Communcation
 
 Communication has simple master-slave server structure.
 The application is the master and the spindle unit is slave server.
+
+
+Using Python socket module
+
+#### Format
 
 Communication data format is
 1. header
@@ -105,7 +192,7 @@ Features
 - Spindle lock engagement
 - Jogging
 
-### Spindle unit
+## Spindle unit
 
 - Control camera and light
 - Running the server
@@ -119,20 +206,6 @@ Features
 - Taking RAW and JPEG images
 - Taking MPEG videos
 
-## Mounting
-
-Maximum available space is composed of two cylinders.
-1. 158 mm x 50 mm
-2. 42 mm x 42 mm
-
-The second cylinder is inside the toolholder
-
-![](images/HSK-50_dimensions.png)
-
-## Components
-
-### On the spindle unit
-
 | Component                             | Info                                                 |
 | ------------------------------------- | ---------------------------------------------------- |
 | Raspberry Pi Zero 2 W                 | Camera control, preprocessing, communication         |
@@ -143,7 +216,62 @@ The second cylinder is inside the toolholder
 | Voltage regulator and battery charger |
 | IP68 housing                          | To protect from accidental coolant                   |
 
-### On the tool holder
+```mermaid
+
+flowchart TD
+
+
+  power_supply[Power Converter]
+  raspi[Raspberry Pi Zero 2 W]
+  light[Light]
+  battery[Battery]
+  camera[Raspberry Pi HQ Camera]
+  mount[HSK 50 Mount]
+  lens[Lens]
+
+  mount === camera
+  battery-->power_supply
+  power_supply--> | 5V |raspi
+  camera === lens
+  power_supply --> | 5V | light
+  
+  light === lens
+
+  subgraph raspi [Raspberry Pi Zero 2 W]
+    libcamera([libcamera])
+    server([Server])
+    preprocessor([Image Preprocessor])
+    libcamera -.-> server
+    server <-.-> preprocessor 
+  end
+
+  raspi === lens
+  libcamera<-.->camera
+
+```
+
+### Mounting
+
+Maximum available space is composed of two cylinders.
+1. 158 mm x 50 mm
+2. 42 mm x 42 mm
+
+The second cylinder is inside the toolholder
+
+![](images/HSK-50_dimensions.png)
+
+
+### Software
+
+
+
+## Components
+
+### On the spindle unit
+
+
+## Charging station
+
 
 | Component            | Info                                                   |
 | -------------------- | ------------------------------------------------------ |
