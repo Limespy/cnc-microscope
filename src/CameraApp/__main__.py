@@ -1,7 +1,7 @@
 try:
-    from . import API as CameraApp
-except ImportError:
     import API as CameraApp
+except ImportError:
+    from . import API as CameraApp
 
 import sys
 
@@ -21,7 +21,7 @@ elif args[0] == 'image':
         print('Showing image')
         CameraApp.show(image, vmax = 12)
 elif args[0] == 'show':
-    CameraApp.show()
+    CameraApp.show(*args[1:])
 elif args[0] == 'hdr':
     if len(args) >= 2:
         image = CameraApp.HDR5()

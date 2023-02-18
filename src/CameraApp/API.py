@@ -1,8 +1,10 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 """Camera control and image processing application"""
-from .GLOBALS import Float32Array, UInt8Array, UInt16Array
-
+try:
+    from .GLOBALS import Float32Array, UInt8Array, UInt16Array
+except ImportError:
+    from GLOBALS import Float32Array, UInt8Array, UInt16Array
 from matplotlib import pyplot as  plt
 import numpy as np
 import numba as nb
@@ -10,13 +12,13 @@ import os
 import pathlib
 path_package = pathlib.Path(__file__).parent.absolute()
 file_extension = 'raw'
-default_location = 
+default_location = path_package / 'test_images' / 'default.raw'
 path_CWD = pathlib.Path.cwd()
 stride = 6112
 rows = 3040
 cols = 4056
 exposure = 2e-3
-black_level = np.uint16(260)
+default_black_level = np.uint16(260)
 class RAMDrive:
 
     def __init__(self, path = path_package / '.tmp_images', size_MiB: int = 40) -> None:
@@ -48,31 +50,38 @@ def take_raw(path: pathlib.Path = default_location,
     return fpath
 #%%═════════════════════════════════════════════════════════════════════
 # DEBAYERING
-left_half = np.uint8(0b11110000)
+left_half  = np.uint8(0b11110000)
 right_half = np.uint8(0b00001111)
-@nb.jit(nopython = True, cache = True)
+
+@nb.njit(nb.uint16[:,:](nb.uint8[:,:], nb.uint8, nb.uint8, nb.uint8, nb.uint8),
+         cache = True)
+def _extract(raw_image, row1 , row2, col1, half):
+    '''
+    Strtucture is:
+    [b_h], [g1_h], [b_l:g1_l], ...
+    [g2_h], [r_h], [g2_l:r_l], ...
+    :                         .
+    :                           .
+    '''
+    B1 = raw_image[row1::2, col1::3].astype(np.uint16)
+    B2 = (raw_image[row2::2, 2::3] & half).astype(np.uint16)
+    return (B1 << 4 | B2).astype(np.uint16)
+
+@nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
 def extract_blue(raw_image: UInt8Array) -> UInt16Array:
-    b1 = raw_image[::2, ::3].astype(np.uint16)
-    b2 = (raw_image[0::2, 2::3] & left_half).astype(np.uint16)
-    return b1 << 4 | b2
+    return _extract(raw_image, 0, 0, 0, left_half)
 
-@nb.jit(nopython = True, cache= True)
+@nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
 def extract_green1(raw_image: UInt8Array) -> UInt16Array:
-    b1 = raw_image[::2, 1::3].astype(np.uint16)
-    b2 = (raw_image[::2, 2::3] & right_half).astype(np.uint16)
-    return b1 << 4 | b2
+    return _extract(raw_image, 0, 0, 1, right_half)
 
-@nb.jit(nopython = True, cache = True)
+@nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
 def extract_green2(raw_image: UInt8Array) -> UInt16Array:
-    b1 = raw_image[1::2, ::3].astype(np.uint16)
-    b2 = (raw_image[1::2, 2::3] & left_half).astype(np.uint16)
-    return b1 << 4 | b2
+    return _extract(raw_image, 1, 0, 1, left_half)
 
-@nb.jit(nopython = True, cache = True)
+@nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
 def extract_red(raw_image: UInt8Array) -> UInt16Array:
-    b1 = raw_image[1::2, 1::3].astype(np.uint16)
-    b2 = (raw_image[1::2, 2::3] & right_half).astype(np.uint16)
-    return b1 << 4 | b2
+    return _extract(raw_image, 1, 1, 1, right_half)
 
 def extract(data, channel = None):
 
@@ -92,8 +101,7 @@ def extract(data, channel = None):
     elif channel == 'red':
         return extract_red(data)
 
-# @nb.jit(nopython = True)
-def substract_black(image: UInt16Array) -> UInt16Array:
+def substract_black(image: UInt16Array, black_level: np.uint16) -> UInt16Array:
     mask = image < black_level
     image[mask] = np.uint16(0)
     image[~mask] -= black_level
@@ -105,8 +113,8 @@ def highlight(image: Float32Array,
               ) -> Float32Array:
     if threshold_high is None:
         threshold_high = 1 - threshold_low
-    image[image < threshold_low] = 1.
-    image[image > threshold_high] = 0.
+    image[image <= threshold_low] = threshold_high
+    image[image >= threshold_high] = threshold_low
     return image
 
 
@@ -121,14 +129,15 @@ def load_raw(path: pathlib.Path = default_location,
 
     with open(path, 'rb') as image_file:
         data = np.fromfile(image_file, dtype = np.uint8, count = rows * stride).reshape(rows, stride)[:,:(cols*3) >> 1]
-
     return data
 
-def show(image = None, vmaxb = 16):
-    vmax = 2 ** vmaxb -1
-    if image is None:
-        image = np.array([[vmax, vmax//2], [vmax//3, vmax // 4]], dtype = np.uint16)
-    plt.imshow(image, cmap = 'gray', vmin=0, vmax=vmax)
+extractors = {'r': extract_red,
+              'g1': extract_green1,
+              'g2': extract_green2,
+              'b': extract_blue}
+def show(imagepath: str, channel = 'g1'):
+    plt.imshow(extractors[channel](load_raw(pathlib.Path(imagepath))),
+               vmax = 2 ** 12 - 1, cmap = 'gray', norm = 'log')
     plt.show()
 
 def HDR5(shutter = 4e-3):
@@ -140,10 +149,10 @@ def HDR5(shutter = 4e-3):
         image = process1(folder)
     return image
 
-@nb.jit(nb.float32[:,:](nb.float32[:,:], nb.float32[:,:]),
+@nb.jit(nb.uint32[:,:](nb.uint16[:,:], nb.uint16[:,:]),
         nopython = True, cache = True, parallel = True)
-def interp_checkerboard(arr1: Float32Array, arr2: Float32Array
-                       ) -> Float32Array:
+def interp_checkerboard(arr1_16: UInt16Array, arr2_16: UInt16Array
+                        ):
     '''
 
     Parameters
@@ -173,70 +182,87 @@ def interp_checkerboard(arr1: Float32Array, arr2: Float32Array
     # 2  _  2  _  2  _  2  _
     # _  1  _  1  _  1  _  1
     # 2  _  2  _  2  _  2  _
-    image = np.empty((arr1.shape[0] * 2, arr1.shape[1] * 2),
-                     dtype = np.float32)
+    image = np.empty((arr1_16.shape[0] * 2, arr1_16.shape[1] * 2),
+                     dtype = np.uint32)
+    arr1 = arr1_16.astype(np.uint32)
+    arr2 = arr2_16.astype(np.uint32)
     image[::2, 1::2] = arr1
     image[1::2, ::2] = arr2
     # Corners
-    image[0, 0] = (arr1[0, 0] + arr2[0, 0]) / 2
-    image[-1, -1] = (arr1[-1, -1] + arr2[-1, -1]) / 2
-    # Edges
-    image[0, 2::2] = (arr1[0, :-1] + arr1[0, 1:] + arr2[0, 1:]) / 3
-    image[-1, 1:-2:2] = (arr2[-1, :-1] + arr2[0, 1:] + arr1[-1, :-1]) / 3
-    image[2::2, 0] = (arr2[:-1, 0] + arr2[1:, 0] + arr1[1:, 0]) / 3
-    image[1:-2:2, -1] = (arr1[:-1, -1] + arr1[1:, -1] + arr2[1:, -1]) / 3
+    image[0, 0] = (arr1[0, 0] + arr2[0, 0]) // 2
+    image[-1, -1] = (arr1[-1, -1] + arr2[-1, -1]) // 2
+    # # Edges
+    image[0, 2::2] = (arr1[0, :-1] + arr1[0, 1:] + arr2[0, 1:]) // 3
+    image[-1, 1:-2:2] = (arr2[-1, :-1] + arr2[0, 1:] + arr1[-1, :-1]) // 3
+    image[2::2, 0] = (arr2[:-1, 0] + arr2[1:, 0] + arr1[1:, 0]) // 3
+    image[1:-2:2, -1] = (arr1[:-1, -1] + arr1[1:, -1] + arr2[1:, -1]) // 3
     # Middle
-    image[1:-1:2, 1:-1:2] = (arr1[:-1,:-1] + arr1[:-1,1:] + arr2[:-1,:-1] + arr2[:-1,1:]) / 4
-    image[2::2, 2::2] = (arr1[1:,:-1] + arr1[1:,1:] + arr2[:-1,1:] + arr2[1:,1:]) / 4
+    image[1:-1:2, 1:-1:2] = (arr1[:-1,:-1]+ arr1[:-1,1:] + arr2[:-1,:-1] + arr2[:-1,1:]) // 4
+    image[2::2, 2::2] = (arr1[1:,:-1] + arr1[1:,1:] + arr2[:-1,1:] + arr2[1:,1:])// 4
     return image
 
+
+@nb.njit(nb.uint16(nb.uint16[:], nb.uint16),
+         cache = True)
+def pixel_combine(data, vmax = 4095):
+    '''Combines data datapoints into single pixel
+    Data is arranged from smallest to largest with each value being '''
+    total = np.uint32(0)
+    n_valid = np.uint32(1) # There is always at least one pixel valid
+    # Finding first valid pixel
+    for i in range(5):
+        pixel = data[i]
+        if pixel > 0:
+            if pixel >= vmax: # In case the first value is overexposed
+                return 0xFFFF
+            total += (pixel << (4 - i))
+            break
+    # Looping until overexposed
+    for i in range(i+1, 5):
+        pixel = data[i]
+        if pixel >= vmax: # pixel is overexposed
+            break # and all the following ones would be too
+        total += (pixel << (4 - i))
+        n_valid += 1
+    return np.uint16(total // n_valid)
+
+@nb.njit(nb.uint16[:,:](nb.uint16[:, :,:], nb.uint16),
+         cache = True)
 def combine5(images: UInt16Array,
-             threshold_fraction: float = 0.001,
-             vmin: np.uint16 | None = None,
-             vmax: np.uint16 | None = None,
-             ) -> Float32Array:
-    if vmin is None: vmin = np.amin(images)
-    if vmax is None: vmax = np.amax(images)
-    vrange = vmax - vmin
-    threshold = np.uint16(threshold_fraction * vrange)
-    threshold_low = vmin + threshold
-    threshold_high = vmax - threshold
-    images_ma = np.ma.array(images,
-                            mask = np.full(images.shape, False),
-                            dtype = np.uint16)
-    if len(images.shape) == 3: # Only one channel
-        for i in range(5):
-            # inverse, because masked array
-            images_ma.mask[i,:,:] |= images_ma[i,:,:] > threshold_high
-            images_ma.mask[i,:,:] |= images_ma[i,:,:] < threshold_low
-            images_ma[i,:,:] <<= 4 - i
-    elif len(images.shape) == 4 and images.shape[3] == 3: # three channels
-        for i in range(5):
-            # inverse, because masked array
-            images_ma.mask[i,:,:,:] |= images_ma[i,:,:,:] > threshold_high
-            images_ma.mask[i,:,:,:] |= images_ma[i,:,:,:] < threshold_low
-            images_ma[i,:,:,:] <<= 4 - i
-    return np.array(images_ma.mean(axis = 0), dtype = np.float32)
+             vmax: np.uint16) -> UInt16Array:
+    '''images[row, column, stack]'''
+    n_row, n_col, _ = images.shape
+    out = np.empty((n_row, n_col), dtype = np.uint16)
+    for irow in range(n_row):
+        for icol in range(n_col):
+            out[irow, icol] = pixel_combine(images[irow, icol], vmax)
+    return out
 
 def correct_green2(green2):
-    vmax = 2**16 - black_level - 15
+    vmax = 2**16 - default_black_level - 15
     return np.log(vmax - green2) / np.log(vmax) * 50
 
-def process1(path_folder: pathlib.Path) -> Float32Array:
+def process0(path_folder):
+    vmax12 = 2**12 -1 
+    black_level_g1 = np.uint16(260)
+    images1 = np.empty((rows // 2, cols // 2, 5), dtype = np.uint16)
+    for n, path_image in zip(range(5), path_folder.glob('*.raw')):
+        data = load_raw(path_image)
+        images1[:,:,n] = substract_black(extract_green1(data), black_level_g1)
+    return combine5(images1, vmax = np.uint16((vmax12 - black_level_g1)))
 
-    threshold_fraction = 1e-3
-    images1 = np.empty((5, rows // 2, cols // 2), dtype = np.uint16)
-    images2 = np.empty((5, rows // 2, cols // 2), dtype = np.uint16)
-    for n, filepath in enumerate(path_folder.glob('*.raw')):
-        data = load_raw(filepath)
-        images1[n,:,:] = substract_black(extract_green1(data))
-        images2[n,:,:] = substract_black(extract_green2(data) + np.uint16(15))
-    image1 = combine5(images1, threshold_fraction = threshold_fraction)
-    image2 = combine5(images2, threshold_fraction = threshold_fraction)
-    # rescaling to same range
-    image2 -= correct_green2(image2)
-    image1 /= np.mean(image1)
-    image2 /= np.mean(image2)
-    image1 **= 0.6
-    image2 **= 0.6
+def process1(path_folder: pathlib.Path) -> Float32Array:
+    '''Combines multiple images into single image'''
+    vmax12 = 2**12 -1
+    black_level_g1 = np.uint16(260)
+    black_level_g2 = black_level_g1 + 60
+    images1 = np.empty((rows // 2, cols // 2, 5), dtype = np.uint16)
+    images2 = np.empty((rows // 2, cols // 2, 5), dtype = np.uint16)
+    for n, path_image in zip(range(5), path_folder.glob('*.raw')):
+        data = load_raw(path_image)
+        images1[:,:, n] = substract_black(extract_green1(data), black_level_g1)
+        images2[:,:, n] = substract_black(extract_green2(data), black_level_g2)
+        print(f'{np.mean(images1[n,:,:]):.1f}, {np.mean(images2[n,:,:]):.1f}')
+    image1 = combine5(images1, vmax = np.uint16((vmax12 - black_level_g1)))
+    image2 = combine5(images2, vmax = np.uint16((vmax12 - black_level_g2)))
     return interp_checkerboard(image1, image2)
