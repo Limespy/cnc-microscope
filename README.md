@@ -7,7 +7,7 @@ DIY CNC microscope based on Raspberry Pi cameras
 - [Overview](#overview)
   - [Table of contents](#table-of-contents)
   - [Variations and use cases](#variations-and-use-cases)
-- [Wireless microscope for HSK-50 spindle](#wireless-microscope-for-hsk-50-spindle)
+- [Wireless microscope for HSK-E50 spindle](#wireless-microscope-for-hsk-e50-spindle)
   - [Operation](#operation)
     - [Application](#application)
       - [Centering](#centering)
@@ -47,7 +47,7 @@ Main components that will be included all of them
 3. Wired
 4. Wireless thet fits to a spindle
 
-# Wireless microscope for HSK-50 spindle
+# Wireless microscope for HSK-E50 spindle
 
 Two main parts
 
@@ -101,12 +101,20 @@ flowchart TD
     controller <-.-> GUI
   end
 
-  
+
 
   server <-.-> |Wi-Fi network| controller
 ```
 
 ## Operation
+
+Main operating mode is greyscale video at 30-60 fsp
+
+IDEA: Foveated compression?
+- Split image into 9 segments
+  - 1 center square section with best quality
+  - Surrounding it 4 rectangle sections with lesser quality
+  - Surrounding them 4 rectangle section with lowest quality
 
 ### Application
 
@@ -143,8 +151,39 @@ ARUCO marker
 Communication has simple master-slave server structure.
 The application is the master and the spindle unit is slave server.
 
-
 Using Python socket module
+
+```mermaid
+
+sequenceDiagram
+  participant Application
+  participant Server
+  participant Controller
+  participant Preprocessor
+  participant Camera
+
+  Application ->> Server: command
+  Server ->> Application: response to previous command
+  Server ->> Controller: command
+
+  Controller ->> Camera: take image
+  Camera ->> Controller: raw image
+  Controller ->> Preprocessor: raw image
+  Preprocessor ->> Controller: compressed image
+  Controller ->> Server: message
+
+  Application ->> Server: command
+  Server ->> Application: response  
+```
+
+This would happen concurrently, probaly using multiple processes.
+At any time during video mode there would be
+- One image being sent
+- Second image being preprocessed
+- Third image being taken
+
+Target would be 60 fps, so none of these should take more than 16 ms.
+
 
 #### Format
 
