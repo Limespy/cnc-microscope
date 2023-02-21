@@ -27,16 +27,11 @@ def compress(image, qualities):
     for i, quality in enumerate(qualities[1:], start = 1):
         rowins = indices(rowhalf, rowstep, i)
         colins = indices(colhalf, colstep, i)
-        subimages = [image[rowins[0]:rowins[1], colins[0]:colins[2]],
+        subimages = (image[rowins[0]:rowins[1], colins[0]:colins[2]],
                      image[rowins[0]:rowins[2], colins[2]:colins[3]],
                      image[rowins[2]:rowins[3], colins[1]:colins[3]],
-                     image[rowins[1]:rowins[3], colins[0]:colins[1]]]
-        subset = []
-        print(rowins)
-        for subimage in subimages:
-            print(subimage.shape)
-            subset.append(encode(subimage, quality))
-        compressed.append(subset)
+                     image[rowins[1]:rowins[3], colins[0]:colins[1]])
+        compressed.append([encode(subimage, quality) for subimage in subimages])
     return image.shape, n_layers, compressed
 
 def encode(image, quality):
@@ -65,23 +60,53 @@ def decompress(shape, n_layers, images):
         image[rowins[1]:rowins[3], colins[0]:colins[1]] = decode(imageset[3])
     return image
 
+def get_size(jpegs):
+    size = sys.getsizeof(jpegs[0])
+    for subimages in jpegs[1:]:
+        for subimage in subimages:
+            size += sys.getsizeof(subimage)
+    return size + 4 + 1
+
 def main(args = sys.argv[1:]):
-    import matplotlib.pyplot as plt
-    import pathlib
+    import time
 
     # path_image = pathlib.Path(args[0])
-    qualitites = (80, 60, 40, 30, 20 ,10)
-    x = np.linspace(-1, 1, 56*(2*len(qualitites) - 1))
-    z = np.outer(1 - x**2, 1- x**2)
-    print(np.amin(z))
+    qualitites = (60, 30, 10)
+
+    x = np.linspace(0, 1, 128*(2*len(qualitites) - 1))
+    x = np.sin(x*21*3.1416)
+    z = np.outer(x, x)
     original_image = (z * 255).astype(np.uint8)
-    compressed_image = decompress(*compress(original_image, qualitites))
 
-    _, axs = plt.subplots(1,2) 
-    axs[0].imshow(original_image, cmap = 'gray')
+    t0 = time.perf_counter()
+    shape, layers, jpegs = compress(original_image, qualitites)
+    print(f'Time to compress {(time.perf_counter() - t0)*1000:.1f} ms')
 
-    axs[1].imshow(compressed_image, cmap = 'gray')
-    plt.show()
+    t0 = time.perf_counter()
+    compressed_image = decompress(shape, layers, jpegs)
+    print(f'Time to decompress {(time.perf_counter() - t0)*1000:.1f} ms')
+
+    simple_jpeg = encode(original_image, 20)
+    simple_compressed = decode(simple_jpeg)
+
+    size_foveated = get_size(jpegs)
+    size_simple = sys.getsizeof(simple_jpeg)
+    if '--show' in args:
+
+        import matplotlib.pyplot as plt
+        _, axs = plt.subplots(1,3, sharex=True, sharey=True) 
+        axs[0].imshow(original_image, cmap = 'gray')
+        axs[0].set_title('Original ')
+        axs[1].imshow(compressed_image, cmap = 'gray')
+        axs[1].set_title(f'Foveated Compression: {size_foveated/1000} kB')
+        axs[2].imshow(simple_compressed, cmap = 'gray')
+        axs[2].set_title(f'Simple Compression: {size_simple/1000} kB')
+
+        for ax in axs:
+            ax.tick_params(labelcolor = 'none', which = 'both',
+                            top = False, bottom = False,
+                            left = False, right = False)
+        plt.show()
 
 if __name__ == '__main__':
     main()
