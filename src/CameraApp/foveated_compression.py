@@ -35,10 +35,11 @@ def compress(image, qualities):
     return image.shape, n_layers, compressed
 
 def encode(image, quality):
-    return cv2.imencode('.jpeg', image, [cv2.IMWRITE_JPEG_QUALITY, quality])[1]
+    return cv2.imencode('.jpeg', image, [cv2.IMWRITE_JPEG_QUALITY, quality])[1].tobytes()
 
 def decode(image):
-    return cv2.imdecode(image, cv2.IMREAD_GRAYSCALE)
+    return cv2.imdecode(np.frombuffer(image, dtype = np.uint8),
+                        cv2.IMREAD_GRAYSCALE)
 
 def decompress(shape, n_layers, images):
 
@@ -71,13 +72,13 @@ def main(args = sys.argv[1:]):
     import time
 
     # path_image = pathlib.Path(args[0])
-    qualitites = (60, 30, 10)
+    qualitites = (50, 30, 15, 5)
 
     x = np.linspace(0, 1, 128*(2*len(qualitites) - 1))
-    x = np.sin(x*21*3.1416)
+    x = np.sin(x*31*3.1416)
     z = np.outer(x, x)
     original_image = (z * 255).astype(np.uint8)
-
+    print(original_image.shape)
     t0 = time.perf_counter()
     shape, layers, jpegs = compress(original_image, qualitites)
     print(f'Time to compress {(time.perf_counter() - t0)*1000:.1f} ms')
@@ -86,11 +87,18 @@ def main(args = sys.argv[1:]):
     compressed_image = decompress(shape, layers, jpegs)
     print(f'Time to decompress {(time.perf_counter() - t0)*1000:.1f} ms')
 
-    simple_jpeg = encode(original_image, 20)
+    sizes = ([sys.getsizeof(jpegs[0])]
+             + [sys.getsizeof(subimages[0]) for subimages in jpegs[1:]])
+    print(sizes)
+
+    simple_jpeg = encode(original_image, 15)
     simple_compressed = decode(simple_jpeg)
 
     size_foveated = get_size(jpegs)
     size_simple = sys.getsizeof(simple_jpeg)
+
+    print(size_foveated)
+    print(size_simple)
     if '--show' in args:
 
         import matplotlib.pyplot as plt
