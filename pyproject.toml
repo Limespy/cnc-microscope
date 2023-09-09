@@ -1,0 +1,46 @@
+[build-system]
+requires = [
+    "setuptools>=64.0",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "numba-integrators"
+description = "Work on CNC microscope"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Unix",
+    "Operating System :: POSIX",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+authors = [
+    { name = "Limespy" },
+]
+requires-python = ">=3.10"
+readme = "README.md"
+version = "0.0.3"
+dynamic = [
+    "dependencies",
+    "optional-dependencies",
+]
+
+[project.urls]
+Homepage = "https://github.com/Limespy/numba-integrators"
+Changelog = "https://github.com/Limespy/numba-integrators/blob/main/README.md#Changelog"
+"Issue Tracker" = "https://github.com/Limespy/numba-integrators/issues"
+
+[tool.setuptools.dynamic.dependencies]
+file = [
+    "dependencies/main.txt",
+]
+
+[tool.setuptools.dynamic.optional-dependencies.dev]
+file = "dependencies/dev.txt"
+
+[tool.setuptools.dynamic.optional-dependencies.build]
+file = "dependencies/build.txt"

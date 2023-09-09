@@ -24,6 +24,15 @@ DIY CNC microscope based on Raspberry Pi cameras
     - [On the spindle unit](#on-the-spindle-unit)
   - [Charging station](#charging-station)
     - [Others](#others)
+- [High Dynamic Range imaging](#high-dynamic-range-imaging)
+  - [Paradigms](#paradigms)
+  - [Algorithm](#algorithm)
+    - [preparing green-only](#preparing-green-only)
+    - [Preparing the images](#preparing-the-images)
+    - [Merging the images](#merging-the-images)
+  - [Other](#other)
+  - [Weights](#weights)
+    - [4th power?](#4th-power)
 
 
 ## Variations and use cases
@@ -43,9 +52,11 @@ Main components that will be included all of them
 2.
 
 
-2. Wired microscope with 
+2. Wired microscope with
 3. Wired
 4. Wireless thet fits to a spindle
+
+------------------------------------------------------------------------
 
 # Wireless microscope for HSK-E50 spindle
 
@@ -77,7 +88,7 @@ flowchart TD
     power_supply--> | 5V |raspi
     camera === lens
     power_supply --> | 5V | light
-    
+
     light === lens
 
     subgraph raspi [Raspberry Pi Zero 2 W]
@@ -85,18 +96,18 @@ flowchart TD
       server([Server])
       preprocessor([Image Preprocessor])
       libcamera -.-> server
-      server <-.-> preprocessor 
+      server <-.-> preprocessor
     end
 
     raspi === lens
     libcamera<-.->camera
   end
-  
+
   subgraph application [Application]
     controller([Controller])
     image_processor([Image Processor])
     GUI([GUI])
-    
+
     controller <-.-> image_processor
     controller <-.-> GUI
   end
@@ -131,11 +142,11 @@ It's main tasks are to
 2. From these pictures the center pixel is calculated.
 3. Images are then cropped around this center point.
 4. Picture is taken of referece maker shaped like L
-5. Image is rotation is calculated from this picture 
+5. Image is rotation is calculated from this picture
 
 ##### Marker
 
-Two options: 
+Two options:
 
 Two thin, (5-20 pixels wide in the camera) perpendicular lines.
 The lines would be aligned with the machine X and y-axis with some calibration values possible.
@@ -173,7 +184,7 @@ sequenceDiagram
   Controller ->> Server: message
 
   Application ->> Server: command
-  Server ->> Application: response  
+  Server ->> Application: response
 ```
 
 This would happen concurrently, probaly using multiple processes.
@@ -203,7 +214,7 @@ Data:
 
 1. Command
 2. [Optional] data
- 
+
 CRC Value: 8 bits
 
 ##### Server to Application
@@ -237,7 +248,7 @@ Features
 - Running the server
 - Preprocessing RAW images for centering
   1. Selcting green channel only
-  2. 
+  2.
 - Preprocess images for the video feed
   1. Select green channel only
   2. Cropping and rotating around the center center point
@@ -273,7 +284,7 @@ flowchart TD
   power_supply--> | 5V |raspi
   camera === lens
   power_supply --> | 5V | light
-  
+
   light === lens
 
   subgraph raspi [Raspberry Pi Zero 2 W]
@@ -281,7 +292,7 @@ flowchart TD
     server([Server])
     preprocessor([Image Preprocessor])
     libcamera -.-> server
-    server <-.-> preprocessor 
+    server <-.-> preprocessor
   end
 
   raspi === lens
@@ -326,5 +337,111 @@ The second cylinder is inside the toolholder
 
 
 
+# High Dynamic Range imaging
+
+## Paradigms
+
+- Branchless (to work later on RasPi OpenCL)
+- Data-oriented
+
+## Algorithm
+
+- input is 12 bits, so `over` is $2^{12} -1$
+- output has ~13-14 bits of precision
+
+### preparing green-only
+
+1. Separate green1 and green2 from the image
+2. Add green1 and green2
+3. Bithshift green1 by one
+4. Add back the first bit from the sum
+
+```python
+green_sum = green1 + green2
+green = (green_sum >> 1) + (green_sum & 1)
+```
+### Preparing the images
+
+1. Take raw image
+2. Convert to uint16 array
+3. Calculate weight array
+   - quadratic `((x >> n) * ((over - x) >> n))>>s`
+   - n = 3
+   - s = 12
+   - Maximum weight 15 (16)
+   - overexposed = 0
+   - underexposed = 0
+   - Exception fo the middle image. Add 1 to weight to handle over or underexposed
+4. Add weight array to weight accumulator
+5. Multiply the image by the weight array
 
 
+### Merging the images
+
+1. Add 1 to accumulator to handle over or underexposed images
+1. Divide each image by the weight array accumulator.
+   1. Special case accumulator zero. return last image instead
+2. Bitshift each image by the exposure index
+3. Add the images together
+4. Save the raw data
+
+
+
+## Other
+
+$$
+b = max(\frac{x}{d} \cdot \frac{a - x}{d})
+  = \frac{a / 2}{d} \cdot \frac{a - a / 2}{d}
+$$
+$$
+b = \frac{a^2}{4 \cdot d^2}
+$$
+$$
+d = \sqrt{\frac{a^2}{4 \cdot b}} = \frac{a}{2 \cdot \sqrt{b}} = 2^n
+$$
+$$
+n = ceil(log_2(\frac{a}{2 \cdot \sqrt{b}}))
+$$
+
+## Weights
+
+### 4th power?
+
+$$
+a \cdot x^4 + b \cdot x^3 + c \cdot x^2 + d \cdot x
+$$
+
+$$
+a + b + c + d = 0
+$$
+$$
+a/4 * 0.5^3 + b / 3 * 0.5^2 + c / 2 * 0.5 + d = 0
+$$
+$$
+a/4 + b / 3 + c / 2 + d = d
+\rightsquigarrow a/4 + b / 3 + c / 2 = 0
+$$
+$$
+a/4/3 * 0.5^2 + b / 3 / 2 * 0.5 + c / 2 = 0
+$$
+
+$$
+\begin{matrix}
+   1 & 1 & 1 & 1 \\
+   1/32 & 1/12 & 1/2 & 1 \\
+   1/4 & 1/3 & 1/2 & 0 \\
+   1/48 & 1/12 & 1/2 & 0
+\end{matrix}\ \cdot \
+\begin{matrix}
+   a  \\
+   b  \\
+   c \\
+   d
+\end{matrix} =
+\begin{matrix}
+   0  \\
+   0  \\
+   0 \\
+   0
+\end{matrix}
+$$

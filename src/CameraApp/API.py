@@ -1,15 +1,16 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 """Camera control and image processing application"""
-try:
-    from .GLOBALS import Float32Array, UInt8Array, UInt16Array
-except ImportError:
-    from GLOBALS import Float32Array, UInt8Array, UInt16Array
-from matplotlib import pyplot as  plt
-import numpy as np
-import numba as nb
 import os
 import pathlib
+
+import numba as nb
+import numpy as np
+from matplotlib import pyplot as  plt
+
+from .GLOBALS import Float32Array
+from .GLOBALS import UInt16Array
+from .GLOBALS import UInt8Array
 path_package = pathlib.Path(__file__).parent.absolute()
 file_extension = 'raw'
 default_location = path_package / 'test_images' / 'default.raw'
@@ -243,7 +244,7 @@ def correct_green2(green2):
     return np.log(vmax - green2) / np.log(vmax) * 50
 
 def process0(path_folder):
-    vmax12 = 2**12 -1 
+    vmax12 = 2**12 -1
     black_level_g1 = np.uint16(260)
     images1 = np.empty((rows // 2, cols // 2, 5), dtype = np.uint16)
     for n, path_image in zip(range(5), path_folder.glob('*.raw')):
