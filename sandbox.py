@@ -179,7 +179,7 @@ def exposure_weight() -> int:
     print(s)
 
     def weight2(v):
-        return ((v >> m) * ((over - v) >> n)) >> s
+        return ((v >> m) * ((over - v) >> n)) >> s & 0b1100
 
     def weight4(v):
         e = 16 # sqrt((over * over) / b) = over / sqrt(b)
@@ -188,28 +188,28 @@ def exposure_weight() -> int:
         n_g = 7 # log2(g)
         mid = (f -  (v >> n_g) * ((over - v) >> n_g))
         print(np.min(mid))
-        return ((b - mid * mid) >> s)
+        return ((b - mid * mid) >> s) & 0b1100
 
     def weight4b(v):
         v = v / over
         diff = 1 - v
         result = 16 * v*v*diff * diff
         print(np.max(result))
-        return (np.uint16(b * result) >> s)
+        return (np.uint16(b * result) >> s) & 0b1100
 
     def weight3(v):
         v = v / over
         diff = 1 - v
         result = 27/4 * v*v*diff
         print(np.max(result))
-        return (np.uint16(b * result) >> s)
+        return (np.uint16(b * result) >> s) & 0b1100
 
     def weight3b(v):
         v = v / over
         diff = 1 - v
         result = 27/4 * v*diff*diff
         print(np.max(result))
-        return (np.uint16(b * result) >> s)
+        return (np.uint16(b * result) >> s) & 0b1100
 
     # def weight4(v):
     #     v1 = values / over
@@ -222,10 +222,10 @@ def exposure_weight() -> int:
     #     return np.uint16(result) >> s
 
     plt.plot(values, weight2(values))
-    plt.plot(values, weight3(values))
+    # plt.plot(values, weight3(values))
     plt.plot(values, weight3b(values))
     plt.plot(values, weight4(values))
-    plt.plot(values, weight4b(values))
+    # plt.plot(values, weight4b(values))
     plt.show()
     return 0
 # ======================================================================
@@ -308,13 +308,13 @@ def int_sqrt() -> int:
     return 0
 # ======================================================================
 def histograms():
-    for path_image in (path_test).glob('*.raw'):
+    for path_image in (path_test / 'grey').glob('*.raw'):
         exposure = float(path_image.stem)
         data = app.load_raw(path_image)
-        green1 = app.substract_black(app.extract_green1(data), 256)
-        hist, edges = np.histogram(green1 / exposure, bins = 256)
+        green1 = app.extract_green1(data)
+        hist, edges = np.histogram(green1, bins = 512)
         plt.plot((edges[1:] + edges[:-1] / 2), hist)
-    plt.xlim(0, (2**12-1) / 0.008)
+    plt.xlim(0, (2**12 - 1))
     plt.show()
 
 # ======================================================================

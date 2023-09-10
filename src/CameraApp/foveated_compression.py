@@ -1,8 +1,9 @@
-import PIL
-import numpy as np
-from io import BytesIO
 import sys
+from io import BytesIO
+
 import cv2
+import numpy as np
+import PIL
 
 
 def indices(half, step, n):
@@ -10,7 +11,7 @@ def indices(half, step, n):
             half - (2*n - 1) * step,
             half + (2*n - 1) * step,
             half + (2*n + 1) * step)
-        
+
 def compress(image, qualities):
     # indices = gen_indices(*image.shape, len(qualities))
     n_layers = len(qualities)
@@ -102,7 +103,7 @@ def main(args = sys.argv[1:]):
     if '--show' in args:
 
         import matplotlib.pyplot as plt
-        _, axs = plt.subplots(1,3, sharex=True, sharey=True) 
+        _, axs = plt.subplots(1,3, sharex=True, sharey=True)
         axs[0].imshow(original_image, cmap = 'gray')
         axs[0].set_title('Original ')
         axs[1].imshow(compressed_image, cmap = 'gray')

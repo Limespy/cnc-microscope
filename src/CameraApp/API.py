@@ -46,7 +46,7 @@ def hello(path: pathlib.Path = path_CWD,
 def take_raw(path: pathlib.Path = default_location,
              fname: str = 'image',
              shutter_s: float = exposure):
-    fpath = path / (fname + "." + file_extension)
+    fpath = path / (fname + '.' + file_extension)
     os.system(f'libcamera-raw 1 --rawfull --segment 1 --flush --shutter {int(shutter_s * 1e6)} --gain 1 -o {fpath}')
     return fpath
 #%%═════════════════════════════════════════════════════════════════════
