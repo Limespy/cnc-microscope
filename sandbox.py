@@ -165,53 +165,85 @@ def DB_log() -> int:
     print(_DB_log(n), np.log2(n))
     return 0
 # ======================================================================
+b = 2**16-1
+c = 2**4 # Maximum weight
+s = np.uint16(np.ceil(np.log2(b / c)))
+over = app.OVER
+def _weight2(v):
+        '''
+        2nd degree polynomial of with unit range representation is
+        x*(1-x)
+        substractions: 1
+        bitshifts: 3
+        multiplications: 1
+        divisions: 0'''
+        return ((v >> 3) * ((over - v) >> 3)) >> s
+
+def _weight3(v):
+    v = v / over
+    diff = 1 - v
+    result = 27/4 * v*v*diff
+    return (np.uint16(b * result) >> s)
+
+def _weight3b(v):
+    v = v / over
+    diff = 1 - v
+    result = 27/4 * v*diff*diff
+    return (np.uint16(b * result) >> s)
+
+def _weight4(v):
+    e = 16 # sqrt((over * over) / b) = over / sqrt(b)
+    f = 255 # over / e = sqrt(b)
+    g = 128 # sqrt(over * e / 4) = sqrt(over * over / sqrt(b) / 4)
+    n_g = 7 # log2(g)
+    mid = (f -  (v >> n_g) * ((over - v) >> n_g))
+    return ((b - mid * mid) >> s)
+
+def _weight4b(v):
+    v = v / over
+    diff = 1 - v
+    result = 16 * v*v*diff * diff
+    return (np.uint16(b * result) >> s)
+
+def _weight4c(v):
+    '''
+    4th degree polynomial of with unit range representation is
+    256 / 27 x*(1-x)^3
+    substractions: 1
+    bitshifts: 3
+    multiplications: 3
+    divisions: 2'''
+    n1 = 4 # round(np.log2(b / over))
+    k1 = 2**n1
+    k2 = 83 # round(((over / k1)**4 / (256/27 * b))**(1/2))
+
+    diff = (over - v) >> n1
+    v1 = v >> n1
+
+    result = ((v1 * diff) // k2) * ((diff * diff) // k2)
+    return result >> s
+
+def _weight5b(v):
+    v = v / over
+    diff = 1 - v
+    result =  3125/108 * v*v*diff * diff*diff
+    return (np.uint16(b * result) >> s)
 def exposure_weight() -> int:
     over = 2**12 -1
     values = np.linspace(0, over, dtype = np.uint16, num = 1000)
-    b = 2**16-1
-    c = 2**4 # Maximum weight
+
+
     mn = np.log2(over* over / 4 / b)
     m = np.uint16(np.round(mn/2))
     n = np.uint16(np.ceil(mn/2))
-    s = np.uint16(np.ceil(np.log2(b / c)))
+
     print(m)
     print(n)
-    print(s)
+    # print(s)
 
-    def weight2(v):
-        return ((v >> m) * ((over - v) >> n)) >> s & 0b1100
 
-    def weight4(v):
-        e = 16 # sqrt((over * over) / b) = over / sqrt(b)
-        f = 255 # over / e = sqrt(b)
-        g = 128 # sqrt(over * e / 4) = sqrt(over * over / sqrt(b) / 4)
-        n_g = 7 # log2(g)
-        mid = (f -  (v >> n_g) * ((over - v) >> n_g))
-        print(np.min(mid))
-        return ((b - mid * mid) >> s) & 0b1100
 
-    def weight4b(v):
-        v = v / over
-        diff = 1 - v
-        result = 16 * v*v*diff * diff
-        print(np.max(result))
-        return (np.uint16(b * result) >> s) & 0b1100
-
-    def weight3(v):
-        v = v / over
-        diff = 1 - v
-        result = 27/4 * v*v*diff
-        print(np.max(result))
-        return (np.uint16(b * result) >> s) & 0b1100
-
-    def weight3b(v):
-        v = v / over
-        diff = 1 - v
-        result = 27/4 * v*diff*diff
-        print(np.max(result))
-        return (np.uint16(b * result) >> s) & 0b1100
-
-    # def weight4(v):
+    # def _weight4(v):
     #     v1 = values / over
     #     p1 = 128 * values # 8 * b / over
     #     p2 = values * (128 - b * 24 * values / over)
@@ -221,11 +253,12 @@ def exposure_weight() -> int:
     #     result = - b * 16 * v4 + b * 32 * v3 - b * 24 * v2 + p1
     #     return np.uint16(result) >> s
 
-    plt.plot(values, weight2(values))
-    # plt.plot(values, weight3(values))
-    plt.plot(values, weight3b(values))
-    plt.plot(values, weight4(values))
-    # plt.plot(values, weight4b(values))
+    plt.plot(values, _weight2(values), label = '2')
+    # plt.plot(values, _weight3(values))
+    plt.plot(values, _weight3b(values), label = '3b')
+    plt.plot(values, _weight4c(values), label = '4c')
+    # plt.plot(values, _weight5b(values), label = '5b')
+    plt.legend()
     plt.show()
     return 0
 # ======================================================================
@@ -307,16 +340,57 @@ def int_sqrt() -> int:
     print(f'waste {waste_fraction}')
     return 0
 # ======================================================================
-def histograms():
-    for path_image in (path_test / 'grey').glob('*.raw'):
+def histograms(imageset: str = 'shiny') -> int:
+    for path_image in (path_test / imageset).glob('*.raw'):
+
         exposure = float(path_image.stem)
         data = app.load_raw(path_image)
-        green1 = app.extract_green1(data)
+        green1 = app.substract_black(app.extract_green1(data), 128)
         hist, edges = np.histogram(green1, bins = 512)
-        plt.plot((edges[1:] + edges[:-1] / 2), hist)
-    plt.xlim(0, (2**12 - 1))
-    plt.show()
 
+        plt.plot((edges[1:] / 2 + edges[:-1] / 2), hist)
+    # plt.xlim(0, app.OVER)
+    plt.show()
+    return 0
+def weighted_histograms(imageset: str = 'shiny') -> int:
+    images_unsorted = []
+
+    for path_image in (path_test / imageset).glob('*.raw'):
+        data = app.load_raw(path_image)
+        images_unsorted.append((float(path_image.stem),
+                       app.substract_black(app.extract_green1(data), 128)))
+
+    images_sorted = sorted(images_unsorted,
+                           key = lambda item: item[0], reverse = True)
+    images = [item[1] for item in images_sorted]
+    middle = len(images) // 2
+    weights_accumulator = np.zeros(images[0].shape, dtype = np.uint16)
+
+    for i in range(len(images)):
+        weights = _weight4c(images[i])
+        if i == middle:
+            weights += 1
+        images[i] *= weights
+        weights_accumulator += weights
+
+    for i in range(len(images)):
+        images[i] //= weights_accumulator
+        images[i] << i
+        hist, edges = np.histogram(images[i], bins = 128)
+        plt.plot((edges[1:] / 2 + edges[:-1] / 2), hist)
+    # plt.xlim(0, app.OVER)
+    plt.show()
+    return 0
+# ======================================================================
+def process2():
+    image = app.process2(path_test / 'shiny')
+    max_value = np.amax(image)
+    min_value = np.amin(image)
+    dynamic_range = max_value / min_value
+    print(f'{min_value=} {max_value=} {dynamic_range=}')
+    # image = np.clip(image, 500, 2000)
+    plt.imshow(image, cmap = 'gray')
+    plt.show()
 # ======================================================================
 def main(args = sys.argv[1:]) -> int:
     if not args:

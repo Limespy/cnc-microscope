@@ -11,18 +11,20 @@ from matplotlib import pyplot as  plt
 from .GLOBALS import Float32Array
 from .GLOBALS import UInt16Array
 from .GLOBALS import UInt8Array
-path_package = pathlib.Path(__file__).parent.absolute()
-file_extension = 'raw'
-default_location = path_package / 'test_images' / 'default.raw'
+PATH_BASE = pathlib.Path(__file__).parent
+FILE_EXTENSION = 'raw'
+PATH_TEST_IMAGES = PATH_BASE / 'test_images'
+default_location = PATH_TEST_IMAGES / 'default.raw'
 path_CWD = pathlib.Path.cwd()
 stride = 6112
 rows = 3040
 cols = 4056
 exposure = 2e-3
 default_black_level = np.uint16(260)
+OVER = np.uint16(2**12 - 1)
 class RAMDrive:
 
-    def __init__(self, path = path_package / '.tmp_images', size_MiB: int = 40) -> None:
+    def __init__(self, path = PATH_BASE / '.tmp_images', size_MiB: int = 40) -> None:
         if path.exists():
             raise FileExistsError('Path already exists')
         self.path = path
@@ -46,7 +48,7 @@ def hello(path: pathlib.Path = path_CWD,
 def take_raw(path: pathlib.Path = default_location,
              fname: str = 'image',
              shutter_s: float = exposure):
-    fpath = path / (fname + '.' + file_extension)
+    fpath = path / (fname + '.' + FILE_EXTENSION)
     os.system(f'libcamera-raw 1 --rawfull --segment 1 --flush --shutter {int(shutter_s * 1e6)} --gain 1 -o {fpath}')
     return fpath
 #%%═════════════════════════════════════════════════════════════════════
@@ -54,9 +56,9 @@ def take_raw(path: pathlib.Path = default_location,
 left_half  = np.uint8(0b11110000)
 right_half = np.uint8(0b00001111)
 
-@nb.njit(nb.uint16[:,:](nb.uint8[:,:], nb.uint8, nb.uint8, nb.uint8, nb.uint8),
-         cache = True)
-def _extract(raw_image, row1 , row2, col1, half):
+# @nb.njit(nb.uint16[:,:](nb.uint8[:,:], nb.uint8, nb.uint8, nb.uint8, nb.uint8),
+#          cache = True)
+def _extract(raw_image, row1 , row2, col1, half, shift2):
     '''
     Strtucture is:
     [b_h], [g1_h], [g1_l:b_l], ...
@@ -64,25 +66,26 @@ def _extract(raw_image, row1 , row2, col1, half):
     :                         .
     :                           .
     '''
-    B1 = raw_image[row1::2, col1::3]
-    B2 = raw_image[row2::2, 2::3] & half
-    return (B1 << 4 | B2).astype(np.uint16)
+    B1 = (raw_image[row1::2, col1::3]).astype(np.uint16)
+    B1 <<= 4
+    B1 |= ((raw_image[row2::2, 2::3] & half) >> shift2).astype(np.uint16)
+    return B1
 
-@nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
+# @nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
 def extract_blue(raw_image: UInt8Array) -> UInt16Array:
-    return _extract(raw_image, 0, 0, 0, left_half)
+    return _extract(raw_image, 0, 0, 0, left_half, 4)
 
-@nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
+# @nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
 def extract_green1(raw_image: UInt8Array) -> UInt16Array:
-    return _extract(raw_image, 0, 0, 1, right_half)
+    return _extract(raw_image, 0, 0, 1, right_half, 0)
 
-@nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
+# @nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
 def extract_green2(raw_image: UInt8Array) -> UInt16Array:
-    return _extract(raw_image, 1, 0, 1, left_half)
+    return _extract(raw_image, 1, 0, 1, left_half, 4)
 
-@nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
+# @nb.njit(nb.uint16[:,:](nb.uint8[:,:]), cache = True)
 def extract_red(raw_image: UInt8Array) -> UInt16Array:
-    return _extract(raw_image, 1, 1, 1, right_half)
+    return _extract(raw_image, 1, 1, 1, right_half, 0)
 
 def extract(data, channel = None):
 
@@ -102,10 +105,12 @@ def extract(data, channel = None):
     elif channel == 'red':
         return extract_red(data)
 
-def substract_black(image: UInt16Array, black_level: np.uint16) -> UInt16Array:
-    mask = image < black_level
-    image[mask] = np.uint16(0)
-    image[~mask] -= black_level
+def substract_black(image: UInt16Array,
+                    black_level: np.uint16 = np.uint16(260)
+                    ) -> UInt16Array:
+    '''In-place substracts black level'''
+    np.maximum(image, black_level, out = image)
+    image -= black_level
     return image
 
 def highlight(image: Float32Array,
@@ -118,10 +123,14 @@ def highlight(image: Float32Array,
     image[image >= threshold_high] = threshold_low
     return image
 
-
-# def debayer(data: UInt8Array, mode: str = 'binning') -> UInt16Array:
-
-#     out = np.empty((()))
+def average_round(array1: UInt16Array,
+                  array2: UInt16Array) -> UInt16Array:
+    '''In-place averages two arrays with space available with rounding'''
+    array1 += array2
+    np.bitwise_and(array1, 1, out = array2) # result saved to array2
+    array1 >>= 1
+    array1 += array2
+    return array1
 
 def load_raw(path: pathlib.Path = default_location,
              rows = rows,
@@ -129,8 +138,10 @@ def load_raw(path: pathlib.Path = default_location,
              stride = stride) -> UInt8Array:
 
     with open(path, 'rb') as image_file:
-        data = np.fromfile(image_file, dtype = np.uint8, count = rows * stride).reshape(rows, stride)[:,:(cols*3) >> 1]
-    return data
+        return np.fromfile(image_file,
+                           dtype = np.uint8,
+                           count = rows * stride
+                           ).reshape(rows, stride)[:,:(cols*3) >> 1]
 
 extractors = {'r': extract_red,
               'g1': extract_green1,
@@ -202,7 +213,6 @@ def interp_checkerboard(arr1_16: UInt16Array, arr2_16: UInt16Array
     image[2::2, 2::2] = (arr1[1:,:-1] + arr1[1:,1:] + arr2[:-1,1:] + arr2[1:,1:])// 4
     return image
 
-
 @nb.njit(nb.uint16(nb.uint16[:], nb.uint16),
          cache = True)
 def pixel_combine(data, vmax = 4095):
@@ -267,3 +277,76 @@ def process1(path_folder: pathlib.Path) -> Float32Array:
     image1 = combine5(images1, vmax = np.uint16((vmax12 - black_level_g1)))
     image2 = combine5(images2, vmax = np.uint16((vmax12 - black_level_g2)))
     return interp_checkerboard(image1, image2)
+
+def weight0(v):
+    return np.ones(v.shape, dtype = np.uint16)
+
+def weight2(v):
+        '''
+        2nd degree polynomial of with unit range representation is
+        x*(1-x)
+        substractions: 1
+        bitshifts: 3
+        multiplications: 1
+        divisions: 0'''
+        return ((v >> 3) * ((OVER - v) >> 3)) >> 12
+
+def weight4c(v):
+    '''
+    4th degree polynomial of with unit range representation is
+    256 / 27 x*(1-x)^3
+    substractions: 1
+    bitshifts: 3
+    multiplications: 3
+    divisions: 2'''
+    n1 = 4 # round(np.log2(b / over))
+    k2 = 83 # round(((over / k1)**4 / (256/27 * b))**(1/2))
+
+    diff = (OVER - v) >> n1
+    v1 = v >> n1
+
+    return ((v1 * diff) // k2) * ((diff * diff) // k2) >> 12
+
+def process2(path_folder: pathlib.Path):
+    '''Combines multiple images into single image'''
+    images_unsorted = []
+    black_level_g1 = np.uint16(128)
+    black_level_g2 = black_level_g1 + 30
+
+    for path_image in (path_folder).glob('*.raw'):
+        data = load_raw(path_image)
+        g1 = substract_black(extract_green1(data), black_level_g1)
+        g2 = substract_black(extract_green2(data), black_level_g2)
+        average_round(g1, g2)
+        max_value = np.amax(g1)
+        min_value = np.amin(g1)
+        dynamic_range = max_value / min_value
+        print(f'{min_value=} {max_value=} {dynamic_range=}')
+        images_unsorted.append((float(path_image.stem), g1))
+
+    images_sorted = sorted(images_unsorted,
+                           key = lambda item: item[0], reverse = True)
+    images = np.array([item[1] for item in images_sorted], dtype = np.uint16)
+
+    middle = len(images) // 2
+    weights_accumulator = np.zeros(images[0].shape, dtype = np.uint16)
+
+    for i in range(len(images)):
+        weights = weight4c(images[i])
+        # weights = weight0(images[i])
+        if i == middle:
+            weights += 1
+        images[i] *= weights
+        weights_accumulator += weights
+
+    tmp = np.zeros(weights_accumulator.shape, dtype = np.uint16)
+    for i in range(len(images)):
+        np.divmod(images[i], weights_accumulator,
+                  out = (images[i], tmp))
+        tmp <<= 1
+        # Should be 1 if over half, 0 if under
+        tmp //= weights_accumulator
+        images[i] += tmp
+        images[i] <<= i
+    np.sum(images, axis = 0, out = tmp)
+    return tmp

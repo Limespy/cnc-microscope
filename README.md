@@ -32,7 +32,6 @@ DIY CNC microscope based on Raspberry Pi cameras
     - [Merging the images](#merging-the-images)
   - [Other](#other)
   - [Weights](#weights)
-    - [4th power?](#4th-power)
 
 
 ## Variations and use cases
@@ -366,25 +365,23 @@ green = (green_sum >> 1) + (green_sum & 1)
 2. Convert to uint16 array
 3. Calculate weight array
    - quadratic `((x >> n) * ((over - x) >> n))>>s`
+   -
    - n = 3
    - s = 12
    - Maximum weight 15 (16)
    - overexposed = 0
    - underexposed = 0
-   - Exception fo the middle image. Add 1 to weight to handle over or underexposed
+   - **Exception fo the middle image: Add 1 to weight to handle over or underexposed**
 4. Add weight array to weight accumulator
 5. Multiply the image by the weight array
 
 
 ### Merging the images
 
-1. Add 1 to accumulator to handle over or underexposed images
 1. Divide each image by the weight array accumulator.
-   1. Special case accumulator zero. return last image instead
 2. Bitshift each image by the exposure index
 3. Add the images together
 4. Save the raw data
-
 
 
 ## Other
@@ -404,44 +401,3 @@ n = ceil(log_2(\frac{a}{2 \cdot \sqrt{b}}))
 $$
 
 ## Weights
-
-### 4th power?
-
-$$
-a \cdot x^4 + b \cdot x^3 + c \cdot x^2 + d \cdot x
-$$
-
-$$
-a + b + c + d = 0
-$$
-$$
-a/4 * 0.5^3 + b / 3 * 0.5^2 + c / 2 * 0.5 + d = 0
-$$
-$$
-a/4 + b / 3 + c / 2 + d = d
-\rightsquigarrow a/4 + b / 3 + c / 2 = 0
-$$
-$$
-a/4/3 * 0.5^2 + b / 3 / 2 * 0.5 + c / 2 = 0
-$$
-
-$$
-\begin{matrix}
-   1 & 1 & 1 & 1 \\
-   1/32 & 1/12 & 1/2 & 1 \\
-   1/4 & 1/3 & 1/2 & 0 \\
-   1/48 & 1/12 & 1/2 & 0
-\end{matrix}\ \cdot \
-\begin{matrix}
-   a  \\
-   b  \\
-   c \\
-   d
-\end{matrix} =
-\begin{matrix}
-   0  \\
-   0  \\
-   0 \\
-   0
-\end{matrix}
-$$
