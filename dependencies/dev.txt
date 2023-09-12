@@ -4,5 +4,5 @@ mypy >= 1.2.0
 pre-commit >= 3.2.2
 pytest >=7.2.0
 reorder-python-imports >= 3.9.0
-tox >= 4.5.1
 yamdog >= 0.5.0
+tox >= 4.5.1
