@@ -161,6 +161,11 @@ def HDR5(shutter = 4e-3):
         image = process1(folder)
     return image
 
+a = 'hmm'
+d = {'a':2}
+b = f"{d['a']}"
+c = f'{d["a"]}'
+
 @nb.jit(nb.uint32[:,:](nb.uint16[:,:], nb.uint16[:,:]),
         nopython = True, cache = True, parallel = True)
 def interp_checkerboard(arr1_16: UInt16Array, arr2_16: UInt16Array
