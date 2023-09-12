@@ -8,7 +8,7 @@ repos:
     -   id: check-toml
     -   id: double-quote-string-fixer
     -   id: requirements-txt-fixer
-        args: [dependencies/main.txt dependencies/dev.txt dependencies/raspi.txt dependenciees/build.txt]
+        args: [dependencies/main.txt, dependencies/dev.txt, dependencies/raspi.txt dependenciees/build.txt]
 -   repo: https://github.com/asottile/reorder_python_imports
     rev: v3.9.0
     hooks:

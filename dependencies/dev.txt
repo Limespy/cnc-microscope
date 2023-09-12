@@ -1,6 +1,7 @@
 colorama >= 0.4
 limedev[test,readme,package] >= 0.3.0
 mypy >= 1.2.0
+tox >= 4.5.1
 pre-commit >= 3.2.2
 tox >= 4.5.1
 pytest >=7.2.0
