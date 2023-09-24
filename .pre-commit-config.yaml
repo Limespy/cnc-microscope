@@ -8,7 +8,8 @@ repos:
     -   id: check-toml
     -   id: double-quote-string-fixer
     -   id: requirements-txt-fixer
-        args: [dependencies/main.txt, dependencies/dev.txt, dependencies/raspi.txt dependenciees/build.txt]
+    -   id: no-commit-to-branch
+        name: No commits to main or master branch
 -   repo: https://github.com/asottile/reorder_python_imports
     rev: v3.9.0
     hooks:
@@ -19,3 +20,8 @@ repos:
     -   id: mypy
         name: Static type check
         args: [--ignore-missing-imports, --config-file, tests/mypy.ini]
+-   repo: https://github.com/PyCQA/docformatter
+    rev: v1.7.5
+    hooks:
+    -   id: docformatter
+        name: Docstring formatting

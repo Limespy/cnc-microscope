@@ -5,7 +5,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "numba-integrators"
+name = "CNC-Microscope"
 description = "Work on CNC microscope"
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -30,17 +30,17 @@ dynamic = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Limespy/numba-integrators"
+Homepage = "https://github.com/Limespy/cnc-microscope"
 Changelog = "https://github.com/Limespy/numba-integrators/blob/main/README.md#Changelog"
 "Issue Tracker" = "https://github.com/Limespy/numba-integrators/issues"
 
 [tool.setuptools.dynamic.dependencies]
 file = [
-    "dependencies/main.txt",
+    "dependencies/requirements.txt",
 ]
 
 [tool.setuptools.dynamic.optional-dependencies.dev]
-file = "dependencies/dev.txt"
+file = "dependencies/requirements_dev.txt"
 
 [tool.setuptools.dynamic.optional-dependencies.build]
-file = "dependencies/build.txt"
+file = "dependencies/requirements_build.txt"

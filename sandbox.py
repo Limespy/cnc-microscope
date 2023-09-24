@@ -4,7 +4,6 @@ import time
 
 import CameraApp as app
 import numpy as np
-from matplotlib import pyplot as plt
 
 PATH_BASE = pathlib.Path(__file__).parent
 path_test = PATH_BASE / 'src' / 'CameraApp' / 'test_images'
@@ -20,6 +19,7 @@ rows = 3040
 cols = 4056
 # ======================================================================
 def combine(*args):
+    from matplotlib import pyplot as plt
     _, axs = plt.subplots(6, 1, sharex = True, sharey = True)
     totalmax = vmax
     for i, filepath in enumerate(path_test.glob('*.raw')):
@@ -48,6 +48,7 @@ def combine(*args):
     plt.show()
 # ======================================================================
 def color(*args):
+    from matplotlib import pyplot as plt
     reds = np.empty((rows // 2, cols // 2, 5), dtype = np.uint16)
     greens = np.empty((rows // 2, cols // 2, 5), dtype = np.uint16)
     blues = np.empty((rows // 2, cols // 2, 5), dtype = np.uint16)
@@ -84,6 +85,7 @@ def interp(*args):
 # ======================================================================
 # analysis
 def grey(*args):
+    from matplotlib import pyplot as plt
     images = np.empty((9, rows // 2, cols // 2, 4), dtype = np.uint16)
     shutters = np.empty((9,1), dtype = np.float32)
 
@@ -138,6 +140,7 @@ def green_diff():
     print(stds)
 # ======================================================================
 def compression(path: str):
+    from matplotlib import pyplot as plt
     image = app.extract_green1(app.load_raw(pathlib.Path(path)))
     normalised = np.divide(image, np.max(image), dtype = np.float16)
     plt.imshow(normalised, cmap = 'gray')
@@ -229,6 +232,7 @@ def _weight5b(v):
     result =  3125/108 * v*v*diff * diff*diff
     return (np.uint16(b * result) >> s)
 def exposure_weight() -> int:
+    from matplotlib import pyplot as plt
     over = 2**12 -1
     values = np.linspace(0, over, dtype = np.uint16, num = 1000)
 
@@ -268,10 +272,7 @@ def int_sqrt() -> int:
     # ------------------------------------------------------------------
     @nb.njit(nb.types.Tuple((nb.uint8, nb.uint16))(nb.uint16))
     def _uint16_sqrt_branchless(s: np.uint16) -> np.uint16:
-        '''
-        TODO Look into OpenCL clz
-        leading = clz(s)
-        '''
+        """TODO Look into OpenCL clz leading = clz(s)"""
         s |= 1
         leading = 16 - np.uint8(np.log2(s)) # stand-in for clz
         # print(leading)
@@ -341,6 +342,7 @@ def int_sqrt() -> int:
     return 0
 # ======================================================================
 def histograms(imageset: str = 'shiny') -> int:
+    from matplotlib import pyplot as plt
     for path_image in (path_test / imageset).glob('*.raw'):
 
         exposure = float(path_image.stem)
@@ -352,7 +354,9 @@ def histograms(imageset: str = 'shiny') -> int:
     # plt.xlim(0, app.OVER)
     plt.show()
     return 0
+# ======================================================================
 def weighted_histograms(imageset: str = 'shiny') -> int:
+    from matplotlib import pyplot as plt
     images_unsorted = []
 
     for path_image in (path_test / imageset).glob('*.raw'):
@@ -382,15 +386,32 @@ def weighted_histograms(imageset: str = 'shiny') -> int:
     plt.show()
     return 0
 # ======================================================================
-def process2():
-    image = app.process2(path_test / 'shiny')
-    max_value = np.amax(image)
-    min_value = np.amin(image)
-    dynamic_range = max_value / min_value
-    print(f'{min_value=} {max_value=} {dynamic_range=}')
-    # image = np.clip(image, 500, 2000)
-    plt.imshow(image, cmap = 'gray')
-    plt.show()
+
+def process2(*args):
+    import time
+    images, high = app.load_green(path_test / 'shiny')
+    t_start = time.perf_counter()
+    image = app.hdr2(images, high)
+    print(f'Processing time: {(time.perf_counter()- t_start):.2f}s')
+
+    values, _ = app.compact_histogramm(image)
+    steps = np.diff(values)
+    print(values)
+    mean_step = np.mean(steps)
+    value_range = values[-1] - values[0]
+    dynamic_range = np.log2(value_range)
+    dynamic_resolution = np.log2(len(values))
+    print(f'{value_range=}\n'
+          f'{mean_step=:.1f}\n'
+          f'{dynamic_range=:.1f}\n'
+          f'{dynamic_resolution=:.1f}')
+    if '--show' in args:
+        from matplotlib import pyplot as plt
+        plt.imshow(image, cmap = 'gray')
+        plt.figure()
+        plt.plot(((values[1:] >> 1) + (values[:1] >> 1)), steps)
+        plt.semilogy()
+        plt.show()
 # ======================================================================
 def main(args = sys.argv[1:]) -> int:
     if not args:
