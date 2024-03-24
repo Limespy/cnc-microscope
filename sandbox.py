@@ -1,19 +1,20 @@
 import pathlib
 import sys
-import time
+# import time
 
-import CameraApp as app
-import numpy as np
+# import CameraApp as app
+# import numpy as np
+# from matplotlib import pyplot as plt
 
 PATH_BASE = pathlib.Path(__file__).parent
 path_test = PATH_BASE / 'src' / 'CameraApp' / 'test_images'
-vmax = np.uint16(2 ** 12 - 1  - app.default_black_level)
+# vmax = np.uint16(2 ** 12 - 1  - app.default_black_level)
 vmin = 0
-vrange = vmax - vmin
+# vrange = vmax - vmin
 threshold_fraction = 0.001
-threshold = np.uint16(threshold_fraction * vrange)
+# threshold = np.uint16(threshold_fraction * vrange)
 
-totalmax = vmax
+# totalmax = vmax
 
 rows = 3040
 cols = 4056
@@ -170,8 +171,8 @@ def DB_log() -> int:
 # ======================================================================
 b = 2**16-1
 c = 2**4 # Maximum weight
-s = np.uint16(np.ceil(np.log2(b / c)))
-over = app.OVER
+#s = np.uint16(np.ceil(np.log2(b / c)))
+#over = app.OVER
 def _weight2(v):
         '''
         2nd degree polynomial of with unit range representation is
@@ -412,6 +413,61 @@ def process2(*args):
         plt.plot(((values[1:] >> 1) + (values[:1] >> 1)), steps)
         plt.semilogy()
         plt.show()
+# ======================================================================
+def sqrt_approx():
+    from timeit import timeit
+    import numpy as np
+    from math import sqrt
+    s = 126. #np.float16(126.)
+    p3 = np.float16(4.641521400101084e-6)
+    p2 = np.float16(-0.0012741903250786247)
+    p1 = np.float16(0.16525943194181406)
+    p0 = np.float16(1.6651195554975557)
+    snippet = 'x= s *(s * (s * 4.641521400101084e-6 -0.0012741903250786247) + 0.16525943194181406) + 1.6651195554975557'
+
+    print(timeit(snippet, number = int(1e6), globals = locals()))
+    print(timeit('x = sqrt(s)', number = int(1e6), globals = locals()))
+    print(timeit('x = s**0.5', number = int(1e6), globals = locals()))
+# ======================================================================
+def compression_step():
+    from timeit import timeit
+    import numpy as np
+    from math import sqrt
+    tolerance = 400.
+    uncompressed = np.round(255.4*np.sin(np.linspace(0., 20.,
+                                               num = 500,
+                                               dtype = np.float16))**2)
+    
+    def check(array, index: int, index_end: int) -> bool:
+        tolerance_local = tolerance
+        length = float(index_end - index)
+        step = int(sqrt(length))
+        k = (array[index_end] - array[index]) / length * step
+        fit = array[index]
+        last = index_end - step
+
+        while index < last:
+            fit += k
+            index += step
+            if abs(fit - array[index]) > tolerance_local:
+                return index
+        return index
+
+    n = int(1e4)
+    chunk = 16
+    t = timeit(f'check(uncompressed, 0, {chunk-1})', number = n, globals = locals())/n
+    chunks = 500/chunk
+    print(f'{t*1e6*chunks:.0f} us, {t*1e3*chunks*500:.0f} ms for row in {chunk} index chunks. ')
+# ======================================================================
+def delta_step_time():
+    from timeit import timeit
+    import numpy as np
+    rng = np.random.default_rng(1234)
+    array1 = rng.random((500,)).astype(np.float16)*np.float16(4000.)
+    array2 = rng.random((500,)).astype(np.float16)*np.float16(4000.)
+    n = int(1e5)
+    t = timeit('a1 -= array2', setup = 'a1 = array1', number = n, globals = locals()) / n
+    print(f'{t*1e6:.0f} us for row, {t*1e3*500:.1f} ms whole channel')
 # ======================================================================
 def main(args = sys.argv[1:]) -> int:
     if not args:
