@@ -20,6 +20,10 @@ DIY CNC microscope based on Raspberry Pi cameras
   - [Spindle unit](#spindle-unit)
     - [Mounting](#mounting)
     - [Software](#software)
+    - [Battery](#battery)
+      - [Dimensioning](#dimensioning)
+        - [Round](#round)
+        - [Rectangular](#rectangular)
   - [Components](#components)
     - [On the spindle unit](#on-the-spindle-unit)
   - [Charging station](#charging-station)
@@ -259,8 +263,8 @@ Features
 | ------------------------------------- | ---------------------------------------------------- |
 | Raspberry Pi Zero 2 W                 | Camera control, preprocessing, communication         |
 | Raspberry Pi HQ Camera with c-mount   | Camera sensor                                        |
-| Lens                                  | Preliminarily 100 mm x 28 mm                         |
-| Ring light, maybe green               | for green monochrome green light would be sufficient |
+| Lens                                  | Preliminarily 100 mm x 18 mm                         |
+| Ring light, maybe green               | for greyscale monochrome green or blue light would be sufficient |
 | Battery                               |
 | Voltage regulator and battery charger |
 | IP68 housing                          | To protect from accidental coolant                   |
@@ -272,17 +276,22 @@ flowchart TD
 
   power_supply[Power Converter]
   raspi[Raspberry Pi Zero 2 W]
+  LED_driver[LED Driver]
   light[Light]
   battery[Battery]
   camera[Raspberry Pi HQ Camera]
+  housing[Housing]
   mount[HSK 50 Mount]
   lens[Lens]
 
-  mount === camera
-  battery-->power_supply
-  power_supply--> | 5V |raspi
+  mount === housing
+  housing === camera
+  battery --> | raw 7.2-8.2 V | LED_driver
+  LED_driver --> light
+
+  battery--> | raw 7.2-8.2 V | power_supply
+  power_supply--> | 5V | raspi
   camera === lens
-  power_supply --> | 5V | light
 
   light === lens
 
@@ -294,8 +303,8 @@ flowchart TD
     server <-.-> preprocessor
   end
 
-  raspi === lens
-  libcamera<-.->camera
+  raspi === housing
+  libcamera<-.-> |CSI 15 pin| camera
 
 ```
 
@@ -313,6 +322,47 @@ The second cylinder is inside the toolholder
 ### Software
 
 
+### Battery
+
+#### Dimensioning
+
+Battery is either rectangular or round.
+
+##### Round
+
+For round battery maximum diameter is
+$$
+dia_{battery} = r_{tool} - r_{lens}
+$$
+
+so the area is
+$$
+A_{battery} = \pi \cdot ((r_{tool} - r_{lens})/2)^2
+$$
+
+##### Rectangular
+
+For rectangular battery
+
+$$
+r_{tool} = \sqrt{(r_{lens} + thickness_{battery})^2 + (width_{battery}/2)^2}
+$$
+or
+
+$$
+width_{battery} = 2 \cdot \sqrt{r_{tool}^2 - (r_{lens} + thickness_{battery})^2}
+$$
+
+Area of the battery would be
+
+$$
+A_{battery} = width_{battery} \cdot thickness_{battery}
+$$
+$$
+ = 2 \cdot \sqrt{r_{tool}^2 - (r_{lens} + thickness_{battery})^2} \cdot thickness_{battery}
+$$
+
+![](readme/figures/spindle_unit_annular.svg)
 
 ## Components
 
