@@ -5,7 +5,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "CNC-Microscope"
+name = "limecamera"
 description = "Work on CNC microscope"
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -17,11 +17,13 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 authors = [
     { name = "Limespy" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 readme = "README.md"
 version = "0.0.4"
 dynamic = [
@@ -29,18 +31,24 @@ dynamic = [
     "optional-dependencies",
 ]
 
+[project.scripts]
+limecamera = "limecamera:main"
+
 [project.urls]
 Homepage = "https://github.com/Limespy/cnc-microscope"
-Changelog = "https://github.com/Limespy/numba-integrators/blob/main/README.md#Changelog"
-"Issue Tracker" = "https://github.com/Limespy/numba-integrators/issues"
+Changelog = "https://github.com/Limespy/cnc-microscope/blob/main/README.md#Changelog"
+"Issue Tracker" = "https://github.com/Limespy/cnc-microscope/issues"
 
 [tool.setuptools.dynamic.dependencies]
 file = [
     "dependencies/requirements.txt",
 ]
 
+[tool.setuptools.dynamic.optional-dependencies.build]
+file = "dependencies/requirements_build.txt"
+
 [tool.setuptools.dynamic.optional-dependencies.dev]
 file = "dependencies/requirements_dev.txt"
 
-[tool.setuptools.dynamic.optional-dependencies.build]
-file = "dependencies/requirements_build.txt"
+[tool.setuptools.dynamic.optional-dependencies.numba]
+file = "dependencies/requirements_numba.txt"

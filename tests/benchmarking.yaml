@@ -1,0 +1,4 @@
+0.0.4:
+  hdr [ms]: 58.2
+  hdr_simple [ms]: 101.0
+  hdr_no_tmp [ms]: 100.0
