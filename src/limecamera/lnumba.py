@@ -24,9 +24,10 @@ except ImportError as exc:
                 return self.__class__(self._exc)
         # ------------------------------------------------------------------
         class MockNumba:
-
+            def __init__(self, exc):
+                self.exc = exc
             def __getattr__(self, _):
-                return Empty(exc)
+                return Empty(self.exc)
             # --------------------------------------------------------------
             def jit(self, function_or_signature = None, **_):
                 if callable(function_or_signature):
@@ -36,7 +37,7 @@ except ImportError as exc:
             njit = jit
             # --------------------------------------------------------------
             prange = staticmethod(range)
-        nb = MockNumba()
+        nb = MockNumba(exc)
 
 if TYPE_CHECKING:
     from typing import TypeAlias

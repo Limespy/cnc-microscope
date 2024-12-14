@@ -14,7 +14,7 @@ else:
 # ======================================================================
 right_half = np.uint8(0b00001111)
 
-@nbDecC
+#@nbDecC
 def _extract_right(raw_image: UInt8Array, out: UInt16Array) -> UInt16Array:
     '''
     Strtucture is:
@@ -28,7 +28,7 @@ def _extract_right(raw_image: UInt8Array, out: UInt16Array) -> UInt16Array:
     out |= (raw_image[:, 2::3] & right_half).astype(np.uint16)
     return out
 # ----------------------------------------------------------------------
-@nbDecC
+#@nbDecC
 def _extract_left(raw_image: UInt8Array, out: UInt16Array) -> UInt16Array:
     '''
     Strtucture is:
@@ -42,19 +42,19 @@ def _extract_left(raw_image: UInt8Array, out: UInt16Array) -> UInt16Array:
     out |= (raw_image[:, 2::3] >> np.uint8(4)).astype(np.uint16)
     return out
 # ----------------------------------------------------------------------
-@nbDecC
+#@nbDecC
 def extract_blue(raw_image: UInt8Array, out: UInt16Array) -> UInt16Array:
     return _extract_left(raw_image[0::2], out)
 # ----------------------------------------------------------------------
-@nbDecC
+#@nbDecC
 def extract_green1(raw_image: UInt8Array, out: UInt16Array) -> UInt16Array:
     return _extract_right(raw_image[0::2], out)
 # ----------------------------------------------------------------------
-@nbDecC
+#@nbDecC
 def extract_green2(raw_image: UInt8Array, out: UInt16Array) -> UInt16Array:
     return _extract_left(raw_image[1::2], out)
 # ----------------------------------------------------------------------
-@nbDecC
+#@nbDecC
 def extract_red(raw_image: UInt8Array, out: UInt16Array) -> UInt16Array:
     return _extract_right(raw_image[1::2], out)
 # ----------------------------------------------------------------------

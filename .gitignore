@@ -1,3 +1,5 @@
+tests/**/profiles/*
+tests/**/benchmarking*.yaml
 *.step
 **/components/
 !**/external documentation/light/LED driver/components/BD9486F.zip
