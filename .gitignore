@@ -1,3 +1,6 @@
+*.step
+**/components/
+!**/external documentation/light/LED driver/components/BD9486F.zip
 .vscode/*
 **/tmp_images/*
 .*.jpeg
