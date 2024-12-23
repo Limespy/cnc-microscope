@@ -1,5 +1,10 @@
+# General
 .*
+!.pre-commit-config.yaml
 !.github
+
+# Sandbox
+sandbox*
 
 # CAD
 *.FCStd1
